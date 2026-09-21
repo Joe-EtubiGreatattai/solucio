@@ -6,5 +6,6 @@ router.use('/auth', require('./auth'));
 router.use('/categories', require('./categories'));
 router.use('/accounts', require('./accounts'));
 router.use('/incomes', require('./incomes'));
+router.use('/expenses', require('./expenses'));
 
 module.exports = router;
