@@ -4,6 +4,8 @@ const reports = require('./reports');
 const { dateFilter } = require('../utils/filters');
 const { formatLagosDate } = require('../utils/dates');
 
+const dmy = (s) => s.split('-').reverse().join('/');
+
 const METHOD = { transfer: 'Bank transfer', pos: 'POS' };
 const populate = [['account', 'name type bankName accountNumber'], ['recordedBy', 'name']];
 const withPopulate = (q) => populate.reduce((acc, [p, s]) => acc.populate(p, s), q);
@@ -17,7 +19,7 @@ async function incomeTable(from, to) {
   const items = await withPopulate(Income.find(dateFilter(from, to)).sort({ date: 1, createdAt: 1 }));
   return {
     title: 'Income',
-    subtitle: `${from} to ${to}`,
+    subtitle: `${dmy(from)} to ${dmy(to)}`,
     columns: [
       { header: 'Date', key: 'date', width: 12 },
       { header: 'Receipt No.', key: 'receiptNumber', width: 16 },
@@ -39,7 +41,7 @@ async function expenseTable(from, to) {
   const items = await withPopulate(Expense.find(dateFilter(from, to)).sort({ date: 1, createdAt: 1 }));
   return {
     title: 'Expenses',
-    subtitle: `${from} to ${to}`,
+    subtitle: `${dmy(from)} to ${dmy(to)}`,
     columns: [
       { header: 'Date', key: 'date', width: 12 },
       { header: 'Category', key: 'category', width: 44 },
@@ -75,7 +77,7 @@ async function summaryTable(from, to) {
   }
   return {
     title: 'Summary',
-    subtitle: `${from} to ${to}`,
+    subtitle: `${dmy(from)} to ${dmy(to)}`,
     columns: [{ header: 'Item', key: 'label', width: 44 }, { header: 'Amount (NGN)', key: 'amount', width: 18, type: 'money' }],
     rows,
     totals: null,

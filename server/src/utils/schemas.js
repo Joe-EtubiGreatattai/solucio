@@ -10,7 +10,8 @@ const recordDate = isoDate.refine((s) => !isFuture(s), 'Date cannot be in the fu
 const amount = z
   .number({ invalid_type_error: 'Amount must be a number', required_error: 'Amount is required' })
   .int('Amount must be in whole kobo')
-  .positive('Amount must be greater than zero');
+  .positive('Amount must be greater than zero')
+  .max(10_000_000_000_000, 'Amount is too large');
 const objectId = z.string().regex(/^[a-f\d]{24}$/i, 'Invalid id');
 const voidBody = z.object({ reason: z.string().trim().min(3, 'Give a reason for voiding') });
 const listQueryShape = {

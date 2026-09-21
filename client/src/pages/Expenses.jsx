@@ -10,8 +10,8 @@ import { formatNaira } from '../utils/money';
 import { accountLabel } from '../utils/labels';
 
 export default function Expenses() {
-  const accounts = useAccounts();
-  const categories = useCategories();
+  const { accounts, error: accountsError } = useAccounts();
+  const { categories, error: categoriesError } = useCategories();
   const [filters, setFilters] = useState({ from: '', to: '', status: 'all', type: '' });
   const [data, setData] = useState({ items: [], total: 0 });
   const [error, setError] = useState('');
@@ -52,7 +52,7 @@ export default function Expenses() {
           </select>
         </Field>
       </div>
-      {error && <p className="error" role="alert">{error}</p>}
+      {(error || accountsError || categoriesError) && <p className="error" role="alert">{error || accountsError || categoriesError}</p>}
       <div className="card">
         <table>
           <thead>

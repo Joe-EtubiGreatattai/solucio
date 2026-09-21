@@ -12,7 +12,7 @@ import { accountLabel } from '../utils/labels';
 const METHOD = { transfer: 'Bank transfer', pos: 'POS' };
 
 export default function Income() {
-  const accounts = useAccounts();
+  const { accounts, error: accountsError } = useAccounts();
   const [filters, setFilters] = useState({ from: '', to: '', status: 'all' });
   const [data, setData] = useState({ items: [], total: 0 });
   const [error, setError] = useState('');
@@ -64,7 +64,7 @@ export default function Income() {
           </select>
         </Field>
       </div>
-      {error && <p className="error" role="alert">{error}</p>}
+      {(error || accountsError) && <p className="error" role="alert">{error || accountsError}</p>}
       <div className="card">
         <table>
           <thead>

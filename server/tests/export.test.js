@@ -28,6 +28,8 @@ test('income xlsx lists voided rows but totals exclude them', async () => {
   await wb.xlsx.load(res.body);
   const ws = wb.worksheets[0];
   expect(ws.getRow(4).getCell(2).value).toBe('Receipt No.');
+  expect(ws.getRow(4).getCell(5).value).toBe('Amount (₦)');
+  expect(ws.getRow(2).getCell(1).value).toBe('01/01/2026 to 31/01/2026');
   const receipts = [5, 6].map((r) => ws.getRow(r).getCell(2).value);
   expect(receipts).toEqual(['RCP-A', 'RCP-B']);
   expect(ws.getRow(6).getCell(6).value).toBe('VOID: Wrong');

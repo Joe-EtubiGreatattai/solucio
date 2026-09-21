@@ -17,7 +17,9 @@ export default function Reports() {
 
   useEffect(() => {
     if (!range.from || !range.to) return;
-    api.get('/reports/spending-by-category', range).then((r) => { setReport(r); setError(''); }).catch((e) => setError(e.message));
+    let ignore = false;
+    api.get('/reports/spending-by-category', range).then((r) => { if (!ignore) { setReport(r); setError(''); } }).catch((e) => { if (!ignore) setError(e.message); });
+    return () => { ignore = true; };
   }, [range]);
 
   const chart = report ? report.types.flatMap((t) => t.groups.map((g) => ({ name: `${t.type}: ${g.group}`, naira: g.total / 100 }))) : [];

@@ -10,7 +10,7 @@ async function renderXlsx(table) {
   ws.addRow([table.title]).font = { bold: true, size: 14 };
   ws.addRow([table.subtitle]);
   ws.addRow([]);
-  ws.addRow(table.columns.map((c) => c.header)).font = { bold: true };
+  ws.addRow(table.columns.map((c) => c.header.replace('NGN', '₦'))).font = { bold: true };
   table.columns.forEach((c, i) => { ws.getColumn(i + 1).width = c.width; });
 
   const money = (row, cells) => {

@@ -18,4 +18,7 @@ const User = require('../src/models/User');
   );
   console.log(`Admin ready: ${ADMIN_EMAIL}`);
   await mongoose.disconnect();
-})();
+})().catch((err) => {
+  console.error(`Could not seed admin: ${err.message}`);
+  process.exit(1);
+});

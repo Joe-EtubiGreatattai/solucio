@@ -13,7 +13,9 @@ export default function Dashboard() {
 
   useEffect(() => {
     if (!range.from || !range.to) return;
-    api.get('/reports/summary', range).then((s) => { setSummary(s); setError(''); }).catch((e) => setError(e.message));
+    let ignore = false;
+    api.get('/reports/summary', range).then((s) => { if (!ignore) { setSummary(s); setError(''); } }).catch((e) => { if (!ignore) setError(e.message); });
+    return () => { ignore = true; };
   }, [range]);
   useEffect(() => {
     api.get('/reports/account-balances').then(setBalances).catch((e) => setError(e.message));

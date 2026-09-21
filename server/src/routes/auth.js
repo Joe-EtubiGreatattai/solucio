@@ -16,7 +16,8 @@ const loginSchema = z.object({
 
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  limit: 20,
+  limit: 50,
+  skipSuccessfulRequests: true,
   skip: () => process.env.NODE_ENV === 'test',
   message: { message: 'Too many login attempts. Try again later.' },
 });

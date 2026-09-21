@@ -24,8 +24,10 @@ test('duplicate email is 409 and short passwords are 400', async () => {
 });
 
 test('list never leaks password hashes', async () => {
+  await create();
   const res = await request(app).get('/api/users').set(auth(admin.token));
   expect(res.status).toBe(200);
+  expect(res.body.length).toBeGreaterThan(1);
   expect(res.body.every((u) => u.passwordHash === undefined)).toBe(true);
 });
 

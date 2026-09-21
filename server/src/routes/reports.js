@@ -46,6 +46,3 @@ router.get('/export', validate(exportQuery, 'query'), asyncHandler(async (req, r
 }));
 
 module.exports = router;
-module.exports.rangeShape = rangeShape;
-module.exports.ordered = ordered;
-module.exports.orderedMsg = orderedMsg;

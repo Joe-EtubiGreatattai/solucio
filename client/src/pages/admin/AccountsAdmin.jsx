@@ -67,7 +67,7 @@ export default function AccountsAdmin() {
             <Field label="Account number" error={errors.accountNumber}><input value={form.accountNumber} onChange={set('accountNumber')} /></Field>
           </>
         )}
-        <Field label="Opening balance (₦)" error={errors.opening}><input inputMode="decimal" value={form.opening} onChange={set('opening')} /></Field>
+        <Field label="Opening balance (₦)" error={errors.opening || errors.openingBalance}><input inputMode="decimal" value={form.opening} onChange={set('opening')} /></Field>
         <div className="row">
           <button>{editingId ? 'Update account' : 'Save account'}</button>
           {editingId && <button type="button" className="secondary" onClick={() => { setEditingId(null); setForm(EMPTY); }}>Cancel</button>}

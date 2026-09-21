@@ -21,6 +21,14 @@ test('cashier records income and gets a receipt number', async () => {
   expect(res.body.voided).toBe(false);
 });
 
+test('rejects amounts above the maximum and never stores 1e17+1', async () => {
+  const over = await post(cashier.token, { amount: 10_000_000_000_001 });
+  expect(over.status).toBe(400);
+  expect(over.body.fields.amount).toBeDefined();
+  expect((await post(cashier.token, { amount: 1e17 + 1 })).status).toBe(400);
+  expect((await post(cashier.token, { amount: 10_000_000_000_000 })).status).toBe(201);
+});
+
 test('rejects future dates, non-integer and zero amounts', async () => {
   expect((await post(cashier.token, { date: '2999-01-01' })).body.fields.date).toBeDefined();
   expect((await post(cashier.token, { amount: 10.5 })).body.fields.amount).toBeDefined();

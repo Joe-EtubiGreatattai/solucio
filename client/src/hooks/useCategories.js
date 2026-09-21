@@ -3,8 +3,9 @@ import { api } from '../api';
 
 export function useCategories() {
   const [categories, setCategories] = useState([]);
+  const [error, setError] = useState('');
   useEffect(() => {
-    api.get('/categories').then(setCategories).catch(() => setCategories([]));
+    api.get('/categories').then(setCategories).catch((e) => { setCategories([]); setError(e.message || 'Could not load categories'); });
   }, []);
-  return categories;
+  return { categories, error };
 }
