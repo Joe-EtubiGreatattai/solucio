@@ -2,14 +2,14 @@ const router = require('express').Router();
 const { z } = require('zod');
 const Expense = require('../models/Expense');
 const Account = require('../models/Account');
-const { authenticate, requireRole } = require('../middleware/auth');
+const { authenticate, requirePermission } = require('../middleware/auth');
 const validate = require('../middleware/validate');
 const asyncHandler = require('../utils/asyncHandler');
 const AppError = require('../utils/AppError');
 const { parseLagosDate } = require('../utils/dates');
 const { recordDate, amount, objectId, voidBody, listQueryShape } = require('../utils/schemas');
 const { dateFilter, statusFilter } = require('../utils/filters');
-const { isValidCategory } = require('../config/categories');
+const { assertValidCategory } = require('../services/categories');
 const { voidRecord } = require('../services/voidRecord');
 const { logAudit } = require('../services/audit');
 
@@ -22,8 +22,7 @@ const createSchema = z
     group: z.string(),
     item: z.string().nullish(),
     note: z.string().trim().max(500).optional(),
-  })
-  .refine((d) => isValidCategory(d.type, d.group, d.item), { message: 'Choose a valid category', path: ['category'] });
+  });
 
 const listQuery = z.object({
   ...listQueryShape,
@@ -32,10 +31,11 @@ const listQuery = z.object({
   item: z.string().optional(),
 });
 
-router.use(authenticate, requireRole('accountant', 'admin'));
+router.use(authenticate);
 
-router.post('/', validate(createSchema), asyncHandler(async (req, res) => {
+router.post('/', requirePermission('expenses.record'), validate(createSchema), asyncHandler(async (req, res) => {
   const b = req.validated.body;
+  await assertValidCategory(b.type, b.group, b.item);
   const account = await Account.findById(b.accountId);
   if (!account || !account.active) {
     throw new AppError(400, 'Account not found or inactive', { accountId: 'Choose an active account' });
@@ -48,7 +48,7 @@ router.post('/', validate(createSchema), asyncHandler(async (req, res) => {
   res.status(201).json(expense);
 }));
 
-router.get('/', validate(listQuery, 'query'), asyncHandler(async (req, res) => {
+router.get('/', requirePermission('expenses.view'), validate(listQuery, 'query'), asyncHandler(async (req, res) => {
   const q = req.validated.query;
   const filter = { ...dateFilter(q.from, q.to), ...statusFilter(q.status) };
   if (q.accountId) filter.account = q.accountId;
@@ -65,7 +65,7 @@ router.get('/', validate(listQuery, 'query'), asyncHandler(async (req, res) => {
   res.json({ items, total, page: q.page, limit: q.limit });
 }));
 
-router.post('/:id/void', validate(voidBody), asyncHandler(async (req, res) => {
+router.post('/:id/void', requirePermission('expenses.void'), validate(voidBody), asyncHandler(async (req, res) => {
   res.json(await voidRecord(Expense, req.params.id, req.validated.body.reason, req.user, 'expense.void'));
 }));
 

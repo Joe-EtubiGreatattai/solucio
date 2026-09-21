@@ -4,9 +4,14 @@ const User = require('../src/models/User');
 const Account = require('../src/models/Account');
 const Income = require('../src/models/Income');
 const Expense = require('../src/models/Expense');
+const Role = require('../src/models/Role');
+const { ensureBuiltInRoles } = require('../src/services/roles');
+const { ensureDefaultCategories } = require('../src/services/categories');
 
 let n = 0;
 async function createUser(role = 'admin', overrides = {}) {
+  await ensureBuiltInRoles();
+  await ensureDefaultCategories();
   n += 1;
   const user = await User.create({
     name: `${role} ${n}`,
@@ -46,4 +51,8 @@ async function makeExpense({ account, recordedBy, amount = 50000, date = '2026-0
   return Expense.create(doc);
 }
 
-module.exports = { createUser, auth, makeAccount, makeIncome, makeExpense };
+async function makeRole(key, permissions = [], overrides = {}) {
+  return Role.create({ key, name: key.replace(/(^|-)(\w)/g, (m, a, c) => (a ? ' ' : '') + c.toUpperCase()), permissions, ...overrides });
+}
+
+module.exports = { createUser, auth, makeAccount, makeIncome, makeExpense, makeRole };

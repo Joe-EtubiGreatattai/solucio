@@ -1,6 +1,8 @@
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
+const Role = require('../models/Role');
 const AppError = require('../utils/AppError');
+const { permissionsForRole, ADMIN_KEY } = require('../config/permissions');
 
 async function authenticate(req, res, next) {
   try {
@@ -14,14 +16,25 @@ async function authenticate(req, res, next) {
     }
     const user = await User.findById(payload.sub);
     if (!user || !user.active) throw new AppError(401, 'Account not available');
+    // Read the role fresh on every request so a change to a role applies straight away.
+    const role = await Role.findOne({ key: user.role }).lean();
     req.user = user;
+    req.roleName = role ? role.name : user.role;
+    req.permissions = new Set(permissionsForRole(role));
     next();
   } catch (err) {
     next(err);
   }
 }
 
-const requireRole = (...roles) => (req, res, next) =>
-  roles.includes(req.user.role) ? next() : next(new AppError(403, 'You are not allowed to do that'));
+// Allows the request only if the person's role holds every listed permission.
+const requirePermission = (...permissions) => (req, res, next) =>
+  permissions.every((p) => req.permissions.has(p))
+    ? next()
+    : next(new AppError(403, 'You are not allowed to do that'));
 
-module.exports = { authenticate, requireRole };
+// Only people who hold the built-in Admin role. Used for changing roles, which can't be delegated.
+const requireAdminRole = (req, res, next) =>
+  req.user.role === ADMIN_KEY ? next() : next(new AppError(403, 'Only an admin can do that'));
+
+module.exports = { authenticate, requirePermission, requireAdminRole };

@@ -1,5 +1,7 @@
-// Empty array = leaf group with no items.
-const CATEGORIES = {
+// The starting expense categories. They are copied into the database the first time the server runs;
+// after that the admin manages them (Admin > Categories) and this list is never applied again.
+// Empty array = a group with no items.
+const DEFAULT_CATEGORIES = {
   Recurrent: {
     'Hospital Consumables': ['Oxygen', 'Toiletries & Stationeries', 'Laboratory Consumables', 'Theatre Consumables', 'Drugs', 'Others'],
     'Servicing & Maintenance': ['Electricity', 'Data & Airtime', 'Plumbing', 'Electrical', 'Fuel', 'Gas', 'Other T.P', 'Others'],
@@ -15,17 +17,4 @@ const CATEGORIES = {
   },
 };
 
-const listCategories = () =>
-  Object.entries(CATEGORIES).map(([type, groups]) => ({
-    type,
-    groups: Object.entries(groups).map(([name, items]) => ({ name, items })),
-  }));
-
-function isValidCategory(type, group, item) {
-  const groups = Object.hasOwn(CATEGORIES, type) ? CATEGORIES[type] : null;
-  const items = groups && Object.hasOwn(groups, group) ? groups[group] : null;
-  if (!items) return false;
-  return items.length === 0 ? !item : items.includes(item);
-}
-
-module.exports = { CATEGORIES, listCategories, isValidCategory };
+module.exports = { DEFAULT_CATEGORIES };

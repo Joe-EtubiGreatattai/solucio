@@ -72,3 +72,37 @@ test('cashiers cannot read reports', async () => {
   const { token } = await createUser('cashier');
   expect((await request(app).get('/api/reports/summary?from=2026-01-01&to=2026-01-02').set(auth(token))).status).toBe(403);
 });
+
+describe('spending by category after the categories change', () => {
+  const Category = require('../src/models/Category');
+
+  test('hidden categories still report the money already spent under them', async () => {
+    const d = '2026-01-15T10:00:00Z';
+    await makeExpense({ ...ctx(), amount: 20000, date: d, type: 'Capital', group: 'Equipment', item: 'Radiology' });
+    await Category.updateOne({ name: 'Capital' }, { $set: { active: false } });
+    const { body } = await get('/spending-by-category?from=2026-01-01&to=2026-01-31');
+    expect(body.types.map((t) => [t.type, t.total])).toEqual([['Capital', 20000]]);
+  });
+
+  test('a leaf group that later gained items keeps its earlier untagged spending', async () => {
+    const d = '2026-01-15T10:00:00Z';
+    await makeExpense({ ...ctx(), amount: 40000, date: d, group: 'Staff Wages' });
+    await Category.updateOne({ name: 'Recurrent' }, { $push: { 'groups.$[g].items': { name: 'Bonus' } } }, { arrayFilters: [{ 'g.name': 'Staff Wages' }] });
+    await makeExpense({ ...ctx(), amount: 10000, date: d, group: 'Staff Wages', item: 'Bonus' });
+    const { body } = await get('/spending-by-category?from=2026-01-01&to=2026-01-31');
+    const wages = body.types[0].groups.find((g) => g.group === 'Staff Wages');
+    expect(wages.total).toBe(50000);
+    expect(wages.items.map((i) => [i.item, i.total])).toEqual([['Bonus', 10000], ['No item', 40000]]);
+    expect(body.grandTotal).toBe(50000);
+  });
+
+  test('new categories show up in the report in the order the admin added them', async () => {
+    const d = '2026-01-15T10:00:00Z';
+    await Category.create({ name: 'Research', order: 2, groups: [{ name: 'Trials', items: [{ name: 'Phase 1' }] }] });
+    await makeExpense({ ...ctx(), amount: 30000, date: d, type: 'Research', group: 'Trials', item: 'Phase 1' });
+    await makeExpense({ ...ctx(), amount: 10000, date: d, group: 'Staff Wages' });
+    const { body } = await get('/spending-by-category?from=2026-01-01&to=2026-01-31');
+    expect(body.types.map((t) => t.type)).toEqual(['Recurrent', 'Research']);
+    expect(body.types[1].groups[0].items[0]).toMatchObject({ item: 'Phase 1', total: 30000 });
+  });
+});

@@ -1,10 +1,11 @@
 const router = require('express').Router();
 const { z } = require('zod');
 const Account = require('../models/Account');
-const { authenticate, requireRole } = require('../middleware/auth');
+const { authenticate, requirePermission } = require('../middleware/auth');
 const validate = require('../middleware/validate');
 const asyncHandler = require('../utils/asyncHandler');
 const AppError = require('../utils/AppError');
+const { logAudit } = require('../services/audit');
 
 const number = z.string().trim().regex(/^\d{4,20}$/, 'Account number must be 4-20 digits');
 
@@ -36,13 +37,22 @@ router.get('/', asyncHandler(async (req, res) => {
   res.json(await Account.find(filter).sort('name'));
 }));
 
-router.post('/', requireRole('admin'), validate(createSchema), asyncHandler(async (req, res) => {
-  res.status(201).json(await Account.create(req.validated.body));
+router.post('/', requirePermission('accounts.manage'), validate(createSchema), asyncHandler(async (req, res) => {
+  const acc = await Account.create(req.validated.body);
+  await logAudit({
+    actor: req.user._id, action: 'account.create', targetModel: 'Account', targetId: acc._id,
+    details: { name: acc.name, type: acc.type, openingBalance: acc.openingBalance },
+  });
+  res.status(201).json(acc);
 }));
 
-router.patch('/:id', requireRole('admin'), validate(updateSchema), asyncHandler(async (req, res) => {
+router.patch('/:id', requirePermission('accounts.manage'), validate(updateSchema), asyncHandler(async (req, res) => {
   const acc = await Account.findByIdAndUpdate(req.params.id, { $set: req.validated.body }, { new: true, runValidators: true });
   if (!acc) throw new AppError(404, 'Account not found');
+  await logAudit({
+    actor: req.user._id, action: 'account.update', targetModel: 'Account', targetId: acc._id,
+    details: { name: acc.name, changes: req.validated.body },
+  });
   res.json(acc);
 }));
 

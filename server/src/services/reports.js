@@ -1,7 +1,7 @@
 const Income = require('../models/Income');
 const Expense = require('../models/Expense');
 const Account = require('../models/Account');
-const { listCategories } = require('../config/categories');
+const { getTree } = require('./categories');
 const { parseLagosDate, dayAfter } = require('../utils/dates');
 
 const rangeMatch = (from, to) => ({
@@ -30,19 +30,16 @@ async function spendingByCategory(from, to) {
   const pct = (n) => (grandTotal ? Math.round((n / grandTotal) * 1000) / 10 : 0);
 
   const types = [];
-  for (const { type, groups } of listCategories()) {
+  for (const { type, groups } of await getTree({ includeInactive: true })) {
     const groupOut = [];
     for (const g of groups) {
-      let items = [];
-      let groupTotal;
-      if (g.items.length === 0) {
-        groupTotal = totals.get(`${type}|${g.name}|`) || 0;
-      } else {
-        items = g.items
-          .map((item) => ({ item, total: totals.get(`${type}|${g.name}|${item}`) || 0 }))
-          .filter((i) => i.total > 0);
-        groupTotal = items.reduce((s, i) => s + i.total, 0);
-      }
+      const untagged = totals.get(`${type}|${g.name}|`) || 0;
+      const items = g.items
+        .map(({ name: item }) => ({ item, total: totals.get(`${type}|${g.name}|${item}`) || 0 }))
+        .filter((i) => i.total > 0);
+      // Money recorded before the group had items has no item; keep it visible rather than dropping it.
+      if (g.items.length > 0 && untagged > 0) items.push({ item: 'No item', total: untagged });
+      const groupTotal = items.reduce((s, i) => s + i.total, 0) + (g.items.length === 0 ? untagged : 0);
       if (groupTotal > 0) {
         groupOut.push({ group: g.name, total: groupTotal, percent: pct(groupTotal), items: items.map((i) => ({ ...i, percent: pct(i.total) })) });
       }

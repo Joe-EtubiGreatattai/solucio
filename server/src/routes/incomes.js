@@ -2,7 +2,7 @@ const router = require('express').Router();
 const { z } = require('zod');
 const Income = require('../models/Income');
 const Account = require('../models/Account');
-const { authenticate, requireRole } = require('../middleware/auth');
+const { authenticate, requirePermission } = require('../middleware/auth');
 const validate = require('../middleware/validate');
 const asyncHandler = require('../utils/asyncHandler');
 const AppError = require('../utils/AppError');
@@ -22,9 +22,9 @@ const createSchema = z.object({
 });
 const listQuery = z.object({ ...listQueryShape, method: z.enum(['transfer', 'pos']).optional() });
 
-router.use(authenticate, requireRole('cashier', 'accountant', 'admin'));
+router.use(authenticate);
 
-router.post('/', validate(createSchema), asyncHandler(async (req, res) => {
+router.post('/', requirePermission('income.record'), validate(createSchema), asyncHandler(async (req, res) => {
   const { amount: amt, date, method, accountId } = req.validated.body;
   const account = await Account.findById(accountId);
   if (!account || !account.active) {
@@ -38,7 +38,7 @@ router.post('/', validate(createSchema), asyncHandler(async (req, res) => {
   res.status(201).json(income);
 }));
 
-router.get('/', validate(listQuery, 'query'), asyncHandler(async (req, res) => {
+router.get('/', requirePermission('income.view'), validate(listQuery, 'query'), asyncHandler(async (req, res) => {
   const q = req.validated.query;
   const filter = { ...dateFilter(q.from, q.to), ...statusFilter(q.status) };
   if (q.accountId) filter.account = q.accountId;
@@ -55,11 +55,11 @@ router.get('/', validate(listQuery, 'query'), asyncHandler(async (req, res) => {
   res.json({ items, total, page: q.page, limit: q.limit });
 }));
 
-router.post('/:id/void', validate(voidBody), asyncHandler(async (req, res) => {
+router.post('/:id/void', requirePermission('income.void'), validate(voidBody), asyncHandler(async (req, res) => {
   res.json(await voidRecord(Income, req.params.id, req.validated.body.reason, req.user, 'income.void'));
 }));
 
-router.get('/:id/receipt', asyncHandler(async (req, res) => {
+router.get('/:id/receipt', requirePermission('income.view'), asyncHandler(async (req, res) => {
   const income = await Income.findById(req.params.id).populate('account').populate('recordedBy', 'name');
   if (!income) throw new AppError(404, 'Receipt not found');
   const pdf = await renderReceipt(income);

@@ -5,6 +5,8 @@ import { nairaToKobo } from '../utils/money';
 import { lagosToday } from '../utils/dates';
 import { accountLabel } from '../utils/labels';
 
+const AMOUNT_HINT = 'Enter a valid amount, e.g. 1500 or 1500.50';
+
 export default function ExpenseForm({ accounts, categories, onSubmit }) {
   const [amount, setAmount] = useState('');
   const [date, setDate] = useState(lagosToday());
@@ -14,12 +16,18 @@ export default function ExpenseForm({ accounts, categories, onSubmit }) {
   const [errors, setErrors] = useState({});
   const [busy, setBusy] = useState(false);
 
+  // Check the amount as soon as the field is left; an empty field is left for submit to flag.
+  const checkAmount = () => {
+    if (!amount.trim()) return;
+    setErrors(({ amount: _previous, ...rest }) => (nairaToKobo(amount) ? rest : { ...rest, amount: AMOUNT_HINT }));
+  };
+
   const submit = async (e) => {
     e.preventDefault();
     const errs = {};
     const kobo = nairaToKobo(amount);
     const group = ((categories.find((c) => c.type === cat.type) || {}).groups || []).find((g) => g.name === cat.group);
-    if (!kobo) errs.amount = 'Enter a valid amount, e.g. 1500 or 1500.50';
+    if (!kobo) errs.amount = AMOUNT_HINT;
     if (!accountId) errs.accountId = 'Choose the account paid from';
     if (!date) errs.date = 'Choose a date';
     if (!cat.type) errs.type = 'Choose a category type';
@@ -42,7 +50,7 @@ export default function ExpenseForm({ accounts, categories, onSubmit }) {
   return (
     <form className="card grid" onSubmit={submit}>
       <Field label="Amount (₦)" error={errors.amount}>
-        <input inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} />
+        <input inputMode="decimal" placeholder="0.00" value={amount} onChange={(e) => setAmount(e.target.value)} onBlur={checkAmount} />
       </Field>
       <Field label="Date" error={errors.date}>
         <input type="date" max={lagosToday()} value={date} onChange={(e) => setDate(e.target.value)} />

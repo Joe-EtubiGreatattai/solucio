@@ -1,13 +1,12 @@
 const mongoose = require('mongoose');
 
-const ROLES = ['cashier', 'accountant', 'admin'];
-
 const userSchema = new mongoose.Schema(
   {
     name: { type: String, required: true, trim: true },
     email: { type: String, required: true, unique: true, lowercase: true, trim: true },
     passwordHash: { type: String, required: true },
-    role: { type: String, enum: ROLES, required: true },
+    // The key of a Role document (see models/Role.js); the users routes check that it exists.
+    role: { type: String, required: true, trim: true, lowercase: true },
     active: { type: Boolean, default: true },
   },
   { timestamps: true }
@@ -21,4 +20,3 @@ userSchema.set('toJSON', {
 });
 
 module.exports = mongoose.model('User', userSchema);
-module.exports.ROLES = ROLES;

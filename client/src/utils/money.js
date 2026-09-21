@@ -6,4 +6,4 @@ export function nairaToKobo(input) {
 }
 export const koboToNaira = (kobo) => (kobo / 100).toFixed(2);
 export const formatNaira = (kobo) =>
-  '₦' + (kobo / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  (kobo < 0 ? '-' : '') + '₦' + (Math.abs(kobo) / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });

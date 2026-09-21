@@ -1,13 +1,16 @@
 import { useEffect, useState } from 'react';
-import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from 'recharts';
 import { api } from '../api';
+import { useAuth } from '../auth/AuthContext';
 import DateRange from '../components/DateRange';
 import Field from '../components/Field';
 import { rangeFor } from '../utils/dates';
 import { formatNaira } from '../utils/money';
 import { downloadBlob } from '../utils/download';
+import { Skeleton } from '../components/Skeleton';
 
 export default function Reports() {
+  const { can } = useAuth();
   const [range, setRange] = useState(rangeFor('month'));
   const [report, setReport] = useState(null);
   const [error, setError] = useState('');
@@ -22,7 +25,8 @@ export default function Reports() {
     return () => { ignore = true; };
   }, [range]);
 
-  const chart = report ? report.types.flatMap((t) => t.groups.map((g) => ({ name: `${t.type}: ${g.group}`, naira: g.total / 100 }))) : [];
+  const chart = report ? report.types.flatMap((t) => t.groups.map((g) => ({ name: `${t.type}: ${g.group}`, amount: g.total, percent: g.percent }))) : [];
+  const colours = ['#8964ee', '#b29af7', '#64c7ad', '#f2ad6e', '#ee7f98', '#6a91d9', '#d6c6fa'];
 
   const exportFile = async () => {
     setBusy(true);
@@ -38,56 +42,61 @@ export default function Reports() {
 
   return (
     <>
-      <h2>Reports</h2>
-      <DateRange value={range} onChange={setRange} />
+      <div className="page-title-row">
+        <h1>Reports</h1>
+        <span className="page-hint">{range.from} to {range.to}</span>
+      </div>
+      <details className="workspace-disclosure workspace-disclosure-compact">
+        <summary>Change report period</summary>
+        <DateRange value={range} onChange={setRange} />
+      </details>
       {error && <p className="error" role="alert">{error}</p>}
 
-      <div className="card row">
-        <Field label="Export">
-          <select value={exportType} onChange={(e) => setExportType(e.target.value)}>
-            <option value="summary">Summary</option><option value="income">Income</option><option value="expenses">Expenses</option>
-          </select>
-        </Field>
-        <Field label="Format">
-          <select value={format} onChange={(e) => setFormat(e.target.value)}>
-            <option value="xlsx">Excel</option><option value="pdf">PDF</option>
-          </select>
-        </Field>
-        <button onClick={exportFile} disabled={busy}>{busy ? 'Preparing…' : 'Download'}</button>
-      </div>
+      {can('reports.export') && (
+        <details className="workspace-disclosure workspace-disclosure-compact">
+          <summary>Export report</summary>
+          <div className="card row export-controls">
+          <Field label="Export">
+            <select value={exportType} onChange={(e) => setExportType(e.target.value)}>
+              <option value="summary">Summary</option><option value="income">Income</option><option value="expenses">Expenses</option>
+            </select>
+          </Field>
+          <Field label="Format">
+            <select value={format} onChange={(e) => setFormat(e.target.value)}>
+              <option value="xlsx">Excel</option><option value="pdf">PDF</option>
+            </select>
+          </Field>
+          <button onClick={exportFile} disabled={busy}>{busy ? 'Preparing…' : 'Download'}</button>
+          </div>
+        </details>
+      )}
 
-      <h3>Spending by category</h3>
+      <h2>Spending by category</h2>
+      {!report && !error && <div className="card report-skeleton"><Skeleton /><Skeleton /><Skeleton /></div>}
       {report && report.grandTotal === 0 && <p>No spending in this period.</p>}
       {report && report.grandTotal > 0 && (
-        <>
-          <div className="card">
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={chart}>
-                <XAxis dataKey="name" interval={0} angle={-20} textAnchor="end" height={80} tick={{ fontSize: 11 }} />
-                <YAxis tickFormatter={(v) => v.toLocaleString()} />
-                <Tooltip formatter={(v) => formatNaira(v * 100)} />
-                <Bar dataKey="naira" fill="#1f6f8b" />
-              </BarChart>
+        <div className="card spending-visual">
+          <div className="pie-wrap">
+            <ResponsiveContainer width="100%" height={330}>
+              <PieChart>
+                <Pie data={chart} dataKey="amount" nameKey="name" cx="50%" cy="50%" innerRadius={78} outerRadius={118} paddingAngle={3} stroke="none">
+                  {chart.map((entry, index) => <Cell key={entry.name} fill={colours[index % colours.length]} />)}
+                </Pie>
+                <Tooltip formatter={(value) => formatNaira(value)} />
+              </PieChart>
             </ResponsiveContainer>
+            <div className="pie-total"><span>Total spending</span><b>{formatNaira(report.grandTotal)}</b></div>
           </div>
-          <div className="card">
-            <table>
-              <thead><tr><th>Category</th><th className="num">Amount</th><th className="num">% of spending</th></tr></thead>
-              <tbody>
-                {report.types.map((t) => [
-                  <tr key={t.type}><td><b>{t.type}</b></td><td className="num"><b>{formatNaira(t.total)}</b></td><td className="num">{t.percent}%</td></tr>,
-                  ...t.groups.flatMap((g) => [
-                    <tr key={`${t.type}|${g.group}`}><td style={{ paddingLeft: 24 }}>{g.group}</td><td className="num">{formatNaira(g.total)}</td><td className="num">{g.percent}%</td></tr>,
-                    ...g.items.map((i) => (
-                      <tr key={`${t.type}|${g.group}|${i.item}`}><td style={{ paddingLeft: 48 }}>{i.item}</td><td className="num">{formatNaira(i.total)}</td><td className="num">{i.percent}%</td></tr>
-                    )),
-                  ]),
-                ])}
-                <tr><td><b>Total</b></td><td className="num"><b>{formatNaira(report.grandTotal)}</b></td><td /></tr>
-              </tbody>
-            </table>
+          <div className="pie-legend" aria-label="Spending breakdown">
+            {chart.map((item, index) => (
+              <div className="pie-legend-item" key={item.name}>
+                <span className="legend-dot" style={{ background: colours[index % colours.length] }} aria-hidden="true" />
+                <span className="legend-name">{item.name}</span>
+                <span className="legend-value"><b>{formatNaira(item.amount)}</b><small>{item.percent}% of spending</small></span>
+              </div>
+            ))}
           </div>
-        </>
+        </div>
       )}
     </>
   );

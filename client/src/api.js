@@ -39,5 +39,23 @@ export const api = {
   get: (p, query) => request('GET', p, { query }),
   post: (p, body) => request('POST', p, { body }),
   patch: (p, body) => request('PATCH', p, { body }),
+  delete: (p) => request('DELETE', p),
   blob: (p, query) => request('GET', p, { query, raw: true }),
+  uploadPdf: async (path, file) => {
+    const headers = { 'Content-Type': 'application/pdf' };
+    if (getToken()) headers.Authorization = `Bearer ${getToken()}`;
+    let res;
+    try {
+      res = await fetch(`/api${path}`, { method: 'POST', headers, body: file });
+    } catch {
+      throw new ApiError(0, 'Cannot reach the server. Check your connection and try again.');
+    }
+    if (res.status === 401) onUnauthorized();
+    if (!res.ok) {
+      let data = {};
+      try { data = await res.json(); } catch { /* not JSON */ }
+      throw new ApiError(res.status, data.message || 'Upload failed', data.fields);
+    }
+    return res.json();
+  },
 };

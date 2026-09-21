@@ -13,6 +13,20 @@ test('shows validation messages and does not submit invalid data', async () => {
   expect(onSubmit).not.toHaveBeenCalled();
 });
 
+test('hints at the format and validates the amount as soon as the field is left', async () => {
+  render(<IncomeForm accounts={accounts} onSubmit={vi.fn()} />);
+  const amount = screen.getByLabelText('Amount (₦)');
+  expect(amount).toHaveAttribute('placeholder', '0.00');
+  await userEvent.type(amount, 'abc');
+  expect(screen.queryByText(/Enter a valid amount/)).toBeNull();
+  await userEvent.tab();
+  expect(screen.getByText(/Enter a valid amount/)).toBeInTheDocument();
+  await userEvent.clear(amount);
+  await userEvent.type(amount, '250');
+  await userEvent.tab();
+  expect(screen.queryByText(/Enter a valid amount/)).toBeNull();
+});
+
 test('submits the payload in kobo', async () => {
   const onSubmit = vi.fn().mockResolvedValue();
   render(<IncomeForm accounts={accounts} onSubmit={onSubmit} />);

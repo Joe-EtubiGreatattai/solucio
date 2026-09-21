@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api';
 import DateRange from '../components/DateRange';
+import TableWrap from '../components/TableWrap';
 import { rangeFor } from '../utils/dates';
 import { formatNaira } from '../utils/money';
 import { accountLabel } from '../utils/labels';
+import { DashboardSkeleton, TableSkeleton } from '../components/Skeleton';
 
 export default function Dashboard() {
   const [range, setRange] = useState(rangeFor('month'));
@@ -23,8 +25,14 @@ export default function Dashboard() {
 
   return (
     <>
-      <h2>Dashboard</h2>
-      <DateRange value={range} onChange={setRange} />
+      <div className="page-title-row">
+        <h1>Dashboard</h1>
+        <span className="page-hint">{range.from} to {range.to}</span>
+      </div>
+      <details className="workspace-disclosure workspace-disclosure-compact">
+        <summary>Change dashboard period</summary>
+        <DateRange value={range} onChange={setRange} />
+      </details>
       {error && <p className="error" role="alert">{error}</p>}
       {summary && (
         <div className="cards">
@@ -33,9 +41,11 @@ export default function Dashboard() {
           <div className="card stat">Net<b>{formatNaira(summary.net)}</b></div>
         </div>
       )}
-      <h3>Balance per account</h3>
-      {balances && (
+      {!summary && <DashboardSkeleton />}
+      <h2>Balance per account</h2>
+      {balances ? (
         <div className="card">
+          <TableWrap label="Balance per account">
           <table>
             <thead><tr><th>Account</th><th className="num">Opening</th><th className="num">In</th><th className="num">Out</th><th className="num">Balance</th></tr></thead>
             <tbody>
@@ -45,14 +55,15 @@ export default function Dashboard() {
                   <td className="num">{formatNaira(a.openingBalance)}</td>
                   <td className="num">{formatNaira(a.totalIn)}</td>
                   <td className="num">{formatNaira(a.totalOut)}</td>
-                  <td className="num"><b>{formatNaira(a.balance)}</b></td>
+                  <td className="num"><b>{formatNaira(a.balance)}</b>{a.balance < 0 && <span className="flag"> Overdrawn</span>}</td>
                 </tr>
               ))}
               <tr><td colSpan={4}><b>All accounts</b></td><td className="num"><b>{formatNaira(balances.grandTotal)}</b></td></tr>
             </tbody>
           </table>
+          </TableWrap>
         </div>
-      )}
+      ) : <div className="card"><table><TableSkeleton columns={5} label="Loading account balances…" /></table></div>}
     </>
   );
 }

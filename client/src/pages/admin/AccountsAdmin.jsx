@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '../../api';
 import Field from '../../components/Field';
+import TableWrap from '../../components/TableWrap';
 import { formatNaira, koboToNaira, nairaToKobo } from '../../utils/money';
 
 const EMPTY = { name: '', type: 'bank', bankName: '', accountNumber: '', opening: '0' };
@@ -9,6 +10,7 @@ export default function AccountsAdmin() {
   const [accounts, setAccounts] = useState([]);
   const [form, setForm] = useState(EMPTY);
   const [editingId, setEditingId] = useState(null);
+  const [showForm, setShowForm] = useState(false);
   const [errors, setErrors] = useState({});
   const [error, setError] = useState('');
 
@@ -38,6 +40,7 @@ export default function AccountsAdmin() {
       else await api.post('/accounts', { ...body, type: form.type });
       setForm(EMPTY);
       setEditingId(null);
+      setShowForm(false);
       setError('');
       load();
     } catch (err) {
@@ -48,13 +51,16 @@ export default function AccountsAdmin() {
 
   const edit = (a) => {
     setEditingId(a._id);
+    setShowForm(true);
     setForm({ name: a.name, type: a.type, bankName: a.bankName || '', accountNumber: a.accountNumber || '', opening: koboToNaira(a.openingBalance) });
   };
   const toggle = (a) => api.patch(`/accounts/${a._id}`, { active: !a.active }).then(load).catch((e) => setError(e.message));
 
   return (
     <>
-      <form className="card grid" onSubmit={submit}>
+      <details className="workspace-disclosure" open={showForm} onToggle={(e) => setShowForm(e.currentTarget.open)}>
+        <summary>{editingId ? 'Edit account' : 'Add account'}</summary>
+        <form className="card grid" onSubmit={submit}>
         <Field label="Name" error={errors.name}><input value={form.name} onChange={set('name')} /></Field>
         <Field label="Type">
           <select value={form.type} onChange={set('type')} disabled={!!editingId}>
@@ -70,13 +76,15 @@ export default function AccountsAdmin() {
         <Field label="Opening balance (₦)" error={errors.opening || errors.openingBalance}><input inputMode="decimal" value={form.opening} onChange={set('opening')} /></Field>
         <div className="row">
           <button>{editingId ? 'Update account' : 'Save account'}</button>
-          {editingId && <button type="button" className="secondary" onClick={() => { setEditingId(null); setForm(EMPTY); }}>Cancel</button>}
+          {editingId && <button type="button" className="secondary" onClick={() => { setEditingId(null); setForm(EMPTY); setShowForm(false); }}>Cancel</button>}
         </div>
-      </form>
+        </form>
+      </details>
       {error && <p className="error" role="alert">{error}</p>}
       <div className="card">
+        <TableWrap label="Accounts">
         <table>
-          <thead><tr><th>Name</th><th>Type</th><th>Bank</th><th className="num">Opening balance</th><th>Status</th><th /></tr></thead>
+          <thead><tr><th>Name</th><th>Type</th><th>Bank</th><th className="num">Opening balance</th><th>Status</th><th><span className="sr-only">Actions</span></th></tr></thead>
           <tbody>
             {accounts.map((a) => (
               <tr key={a._id}>
@@ -84,14 +92,15 @@ export default function AccountsAdmin() {
                 <td>{a.type === 'bank' ? `${a.bankName} ${a.accountNumber}` : '-'}</td>
                 <td className="num">{formatNaira(a.openingBalance)}</td>
                 <td>{a.active ? 'Active' : 'Inactive'}</td>
-                <td className="row">
-                  <button className="secondary" onClick={() => edit(a)}>Edit</button>
-                  <button className="secondary" onClick={() => toggle(a)}>{a.active ? 'Deactivate' : 'Activate'}</button>
+                <td className="row actions">
+                  <button className="link" aria-label={`Edit ${a.name}`} onClick={() => edit(a)}>Edit</button>
+                  <button className="link" aria-label={`${a.active ? 'Deactivate' : 'Activate'} ${a.name}`} onClick={() => toggle(a)}>{a.active ? 'Deactivate' : 'Activate'}</button>
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
+        </TableWrap>
       </div>
     </>
   );

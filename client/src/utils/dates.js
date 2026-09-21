@@ -17,3 +17,9 @@ export function formatDate(iso) {
   const [y, m, d] = new Date(new Date(iso).getTime() + HOUR).toISOString().slice(0, 10).split('-');
   return `${d}/${m}/${y}`;
 }
+
+export function formatDateTime(iso) {
+  const s = new Date(new Date(iso).getTime() + HOUR).toISOString();
+  const [y, m, d] = s.slice(0, 10).split('-');
+  return `${d}/${m}/${y} ${s.slice(11, 16)}`;
+}

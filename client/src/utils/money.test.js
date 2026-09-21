@@ -13,3 +13,8 @@ test('koboToNaira and formatNaira', () => {
   expect(koboToNaira(150050)).toBe('1500.50');
   expect(formatNaira(150050)).toBe('₦1,500.50');
 });
+test('formatNaira puts the minus sign before the currency symbol', () => {
+  expect(formatNaira(-2000000)).toBe('-₦20,000.00');
+  expect(formatNaira(-5)).toBe('-₦0.05');
+  expect(formatNaira(0)).toBe('₦0.00');
+});

@@ -2,6 +2,8 @@ require('dotenv').config();
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 const User = require('../src/models/User');
+const { ensureBuiltInRoles } = require('../src/services/roles');
+const { ensureDefaultCategories } = require('../src/services/categories');
 
 (async () => {
   const { ADMIN_NAME = 'Administrator', ADMIN_EMAIL, ADMIN_PASSWORD, MONGODB_URI } = process.env;
@@ -10,6 +12,8 @@ const User = require('../src/models/User');
     process.exit(1);
   }
   await mongoose.connect(MONGODB_URI);
+  await ensureBuiltInRoles();
+  await ensureDefaultCategories();
   const passwordHash = await bcrypt.hash(ADMIN_PASSWORD, 10);
   await User.findOneAndUpdate(
     { email: ADMIN_EMAIL.toLowerCase() },
