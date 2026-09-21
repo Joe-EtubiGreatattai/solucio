@@ -1,6 +1,7 @@
 const request = require('supertest');
 const app = require('../src/app');
 const { createUser, auth, makeAccount } = require('./helpers');
+const { pdfText } = require('./pdfText');
 
 const binary = (res, cb) => {
   const chunks = [];
@@ -8,26 +9,6 @@ const binary = (res, cb) => {
   res.on('end', () => cb(null, Buffer.concat(chunks)));
 };
 const getPdf = (token, id) => request(app).get(`/api/incomes/${id}/receipt`).set(auth(token)).buffer(true).parse(binary);
-
-// Isolate pdf-parse module per call to avoid global state pollution
-const pdfText = async (buffer) => {
-  // Clear pdf-parse from require cache and reload in isolation
-  const parsePath = require.resolve('pdf-parse/lib/pdf-parse.js');
-  delete require.cache[parsePath];
-  // Also clear the bundled pdf.js to force reinitialization
-  Object.keys(require.cache).forEach(key => {
-    if (key.includes('pdf-parse') || key.includes('pdfjs-dist')) {
-      delete require.cache[key];
-    }
-  });
-
-  let parse;
-  jest.isolateModules(() => {
-    parse = require('pdf-parse/lib/pdf-parse.js');
-  });
-  const { text } = await parse(buffer);
-  return text;
-};
 
 let cashier, income;
 beforeEach(async () => {
