@@ -1,4 +1,6 @@
 const TOKEN_KEY = 'solucio_token';
+// Empty in development (Vite proxies /api). Set VITE_API_URL to the API's address when the app and API live on different sites.
+const API_BASE = (import.meta.env.VITE_API_URL || '').replace(/\/+$/, '');
 export const getToken = () => localStorage.getItem(TOKEN_KEY);
 export const setToken = (t) => (t ? localStorage.setItem(TOKEN_KEY, t) : localStorage.removeItem(TOKEN_KEY));
 
@@ -22,7 +24,7 @@ async function request(method, path, { body, query, raw } = {}) {
   if (getToken()) headers.Authorization = `Bearer ${getToken()}`;
   let res;
   try {
-    res = await fetch(`/api${path}${qs}`, { method, headers, body: body ? JSON.stringify(body) : undefined });
+    res = await fetch(`${API_BASE}/api${path}${qs}`, { method, headers, body: body ? JSON.stringify(body) : undefined });
   } catch {
     throw new ApiError(0, 'Cannot reach the server. Check your connection and try again.');
   }
@@ -46,7 +48,7 @@ export const api = {
     if (getToken()) headers.Authorization = `Bearer ${getToken()}`;
     let res;
     try {
-      res = await fetch(`/api${path}`, { method: 'POST', headers, body: file });
+      res = await fetch(`${API_BASE}/api${path}`, { method: 'POST', headers, body: file });
     } catch {
       throw new ApiError(0, 'Cannot reach the server. Check your connection and try again.');
     }

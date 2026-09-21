@@ -1,0 +1,27 @@
+[Unit]
+Description=Solucio Payment and Receipt API
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=solucio
+Group=solucio
+WorkingDirectory=/var/www/solucio-backend
+EnvironmentFile=/var/www/solucio-backend/.env
+Environment=NODE_OPTIONS=--max-old-space-size=256
+ExecStart=/usr/bin/node src/server.js
+Restart=always
+RestartSec=5
+# Shared server: keep this app from starving its neighbours (cgroup v1 here, so MemoryLimit).
+MemoryLimit=350M
+# The app writes nothing to disk, so lock the machine down around it.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+
+[Install]
+WantedBy=multi-user.target
