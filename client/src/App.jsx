@@ -4,6 +4,7 @@ import Layout from './components/Layout';
 import RequireRole from './components/RequireRole';
 import Login from './pages/Login';
 import Income from './pages/Income';
+import Expenses from './pages/Expenses';
 
 const Placeholder = ({ name }) => <p>{name} (coming in a later task)</p>;
 const FIN = ['accountant', 'admin'];
@@ -17,7 +18,7 @@ export default function App() {
       <Routes>
         <Route path="/" element={user.role === 'cashier' ? <Navigate to="/income" replace /> : <Placeholder name="Dashboard" />} />
         <Route path="/income" element={<Income />} />
-        <Route path="/expenses" element={<RequireRole roles={FIN}><Placeholder name="Expenses" /></RequireRole>} />
+        <Route path="/expenses" element={<RequireRole roles={FIN}><Expenses /></RequireRole>} />
         <Route path="/reports" element={<RequireRole roles={FIN}><Placeholder name="Reports" /></RequireRole>} />
         <Route path="/admin" element={<RequireRole roles={['admin']}><Placeholder name="Admin" /></RequireRole>} />
         <Route path="*" element={<Navigate to="/" replace />} />
