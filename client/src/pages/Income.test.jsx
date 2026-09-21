@@ -5,6 +5,7 @@ import { AuthContext } from '../auth/AuthContext';
 import Income from './Income';
 import { api } from '../api';
 import { viewReceipt } from '../utils/receipt';
+import { features } from '../features';
 
 vi.mock('../api', () => ({ api: { get: vi.fn(), post: vi.fn() } }));
 vi.mock('../utils/receipt', () => ({ viewReceipt: vi.fn().mockResolvedValue() }));
@@ -20,6 +21,7 @@ const accounts = [{ _id: 'a1', name: 'Main Operations', type: 'cash' }];
 const saved = { _id: 'i1', receiptNumber: 'RCP-2026-0007', amount: 150050, method: 'transfer', date: '2026-09-20T23:00:00.000Z', account: 'a1' };
 
 beforeEach(() => {
+  features.receipts = true; // most tests here use the receipt buttons; the switch is tested at the bottom
   vi.clearAllMocks();
   api.get.mockImplementation((path) => Promise.resolve(path === '/accounts' ? accounts : { items: [], total: 0 }));
   api.post.mockResolvedValue(saved);
@@ -109,5 +111,45 @@ describe('what a role is allowed to do on this page', () => {
     expect(screen.queryByRole('button', { name: 'View receipt' })).toBeNull();
     expect(screen.queryByRole('region', { name: 'Income entries' })).toBeNull();
     expect(api.get).not.toHaveBeenCalledWith('/incomes', expect.anything());
+  });
+});
+
+describe('the receipt PDF switch (features.receipts)', () => {
+  const row = { _id: 'i9', receiptNumber: 'RCP-2026-0042', amount: 150000, method: 'pos', date: '2026-09-20T23:00:00.000Z', account: { name: 'Main Operations', type: 'cash' }, recordedBy: { name: 'Chioma' }, voided: false };
+
+  afterEach(() => { features.receipts = true; });
+
+  test('it ships switched off', async () => {
+    vi.resetModules();
+    const fresh = await import('../features');
+    expect(fresh.features.receipts).toBe(false);
+  });
+
+  test('off: the list has no receipt PDF link, but still shows the receipt number', async () => {
+    features.receipts = false;
+    api.get.mockImplementation((path) => Promise.resolve(path === '/accounts' ? accounts : { items: [row], total: 1 }));
+    renderIncome();
+    expect(await screen.findByText('RCP-2026-0042')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /View receipt/ })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Void RCP-2026-0042' })).toBeInTheDocument();
+  });
+
+  test('off: recording a payment confirms it with its number but offers no PDF', async () => {
+    features.receipts = false;
+    renderIncome();
+    await userEvent.type(screen.getByLabelText('Amount (₦)'), '100');
+    await userEvent.selectOptions(await screen.findByLabelText('Account'), 'a1');
+    await userEvent.click(screen.getByRole('button', { name: 'Record payment' }));
+    expect(await screen.findByRole('status')).toHaveTextContent('Payment recorded');
+    expect(screen.getByRole('status')).toHaveTextContent('RCP-2026-0007');
+    expect(screen.queryByRole('button', { name: 'View receipt' })).toBeNull();
+    expect(viewReceipt).not.toHaveBeenCalled();
+  });
+
+  test('on: both receipt buttons come back', async () => {
+    features.receipts = true;
+    api.get.mockImplementation((path) => Promise.resolve(path === '/accounts' ? accounts : { items: [row], total: 1 }));
+    renderIncome();
+    expect(await screen.findByRole('button', { name: 'View receipt RCP-2026-0042' })).toBeInTheDocument();
   });
 });

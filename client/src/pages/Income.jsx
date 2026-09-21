@@ -8,6 +8,7 @@ import PaymentSuccess from '../components/PaymentSuccess';
 import TableWrap from '../components/TableWrap';
 import Field from '../components/Field';
 import { viewReceipt } from '../utils/receipt';
+import { features } from '../features';
 import { formatDate } from '../utils/dates';
 import { formatNaira } from '../utils/money';
 import { accountLabel } from '../utils/labels';
@@ -68,7 +69,7 @@ export default function Income() {
           income={notice}
           account={accounts.find((a) => a._id === notice.account)}
           onViewReceipt={viewReceipt}
-          canViewReceipt={canView}
+          canViewReceipt={canView && features.receipts}
           onDismiss={() => setNotice(null)}
         />
       )}
@@ -104,7 +105,9 @@ export default function Income() {
                   <td>{i.recordedBy && i.recordedBy.name}</td>
                   <td className="keep">{i.voided ? `Void: ${i.voidReason}` : 'Active'}</td>
                   <td className="keep row actions">
-                    <button className="link" aria-label={`View receipt ${i.receiptNumber}`} onClick={() => viewReceipt(i._id).catch((e) => setError(e.message))}>Receipt</button>
+                    {features.receipts && (
+                      <button className="link" aria-label={`View receipt ${i.receiptNumber}`} onClick={() => viewReceipt(i._id).catch((e) => setError(e.message))}>Receipt</button>
+                    )}
                     {!i.voided && canVoid && <button className="link danger-text" aria-label={`Void ${i.receiptNumber}`} onClick={() => setVoidId(i._id)}>Void</button>}
                   </td>
                 </tr>
