@@ -2,6 +2,7 @@ import { NavLink } from 'react-router-dom';
 import { useState } from 'react';
 import { useAuth } from '../auth/AuthContext';
 import { visibleNav } from '../nav';
+import CommandPalette from './CommandPalette';
 
 function Icon({ name }) {
   const paths = {
@@ -48,6 +49,7 @@ export default function Layout({ children }) {
         <header className="mobile-head"><div className="brand"><span className="brand-mark">S</span><span>solucio</span></div><span className="avatar">{user.name?.slice(0, 1).toUpperCase()}</span></header>
         <header className="workspace-head">
           <div><strong>Welcome back, {user.name?.split(' ')[0]}!</strong><span>Here is your payment workspace.</span></div>
+          <CommandPalette />
           <div className="workspace-user"><span className="avatar">{user.name?.slice(0, 1).toUpperCase()}</span><span><b>{user.name}</b><small>Solucio workspace</small></span></div>
         </header>
         <main>{children}</main>

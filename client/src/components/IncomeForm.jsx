@@ -3,14 +3,15 @@ import Field from './Field';
 import { nairaToKobo } from '../utils/money';
 import { lagosToday } from '../utils/dates';
 import { accountLabel } from '../utils/labels';
+import { useStoredState } from '../hooks/useStoredState';
 
 const AMOUNT_HINT = 'Enter a valid amount, e.g. 1500 or 1500.50';
 
 export default function IncomeForm({ accounts, onSubmit }) {
   const [amount, setAmount] = useState('');
   const [date, setDate] = useState(lagosToday());
-  const [method, setMethod] = useState('transfer');
-  const [accountId, setAccountId] = useState('');
+  const [method, setMethod] = useStoredState('solucio:last-income-method', 'transfer');
+  const [accountId, setAccountId] = useStoredState('solucio:last-income-account', '');
   const [errors, setErrors] = useState({});
   const [busy, setBusy] = useState(false);
 

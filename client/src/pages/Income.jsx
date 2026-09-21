@@ -13,6 +13,7 @@ import { formatDate } from '../utils/dates';
 import { formatNaira } from '../utils/money';
 import { accountLabel } from '../utils/labels';
 import { TableSkeleton } from '../components/Skeleton';
+import { useStoredState } from '../hooks/useStoredState';
 
 const METHOD = { transfer: 'Bank transfer', pos: 'POS' };
 
@@ -22,7 +23,7 @@ export default function Income() {
   const canRecord = can('income.record');
   const canVoid = can('income.void');
   const { accounts, error: accountsError } = useAccounts();
-  const [filters, setFilters] = useState({ from: '', to: '', status: 'all' });
+  const [filters, setFilters] = useStoredState('solucio:income-filters', { from: '', to: '', status: 'all' });
   const [data, setData] = useState({ items: [], total: 0 });
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState('');

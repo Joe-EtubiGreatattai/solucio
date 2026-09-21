@@ -4,14 +4,15 @@ import CategorySelect from './CategorySelect';
 import { nairaToKobo } from '../utils/money';
 import { lagosToday } from '../utils/dates';
 import { accountLabel } from '../utils/labels';
+import { useStoredState } from '../hooks/useStoredState';
 
 const AMOUNT_HINT = 'Enter a valid amount, e.g. 1500 or 1500.50';
 
 export default function ExpenseForm({ accounts, categories, onSubmit }) {
   const [amount, setAmount] = useState('');
   const [date, setDate] = useState(lagosToday());
-  const [accountId, setAccountId] = useState('');
-  const [cat, setCat] = useState({ type: '', group: '', item: '' });
+  const [accountId, setAccountId] = useStoredState('solucio:last-expense-account', '');
+  const [cat, setCat] = useStoredState('solucio:last-expense-category', { type: '', group: '', item: '' });
   const [note, setNote] = useState('');
   const [errors, setErrors] = useState({});
   const [busy, setBusy] = useState(false);

@@ -1,17 +1,22 @@
 import { useEffect, useState } from 'react';
+import { NavLink } from 'react-router-dom';
 import { api } from '../api';
+import { useAuth } from '../auth/AuthContext';
 import DateRange from '../components/DateRange';
 import TableWrap from '../components/TableWrap';
 import { rangeFor } from '../utils/dates';
 import { formatNaira } from '../utils/money';
 import { accountLabel } from '../utils/labels';
 import { DashboardSkeleton, TableSkeleton } from '../components/Skeleton';
+import { useStoredState } from '../hooks/useStoredState';
 
 export default function Dashboard() {
-  const [range, setRange] = useState(rangeFor('month'));
+  const { can } = useAuth();
+  const [range, setRange] = useStoredState('solucio:dashboard-range', rangeFor('month'));
   const [summary, setSummary] = useState(null);
   const [balances, setBalances] = useState(null);
   const [error, setError] = useState('');
+  const attention = balances?.accounts.filter((account) => account.balance < 0) || [];
 
   useEffect(() => {
     if (!range.from || !range.to) return;
@@ -34,6 +39,16 @@ export default function Dashboard() {
         <DateRange value={range} onChange={setRange} />
       </details>
       {error && <p className="error" role="alert">{error}</p>}
+      <section className="action-center" aria-label="Quick actions">
+        <div><p className="section-eyebrow">START HERE</p><h2>What do you need to do?</h2></div>
+        <div className="quick-actions">
+          {can('income.record') && <NavLink to="/income" className="quick-action"><span>↑</span><b>Record income</b><small>Capture a payment</small></NavLink>}
+          {can('expenses.record') && <NavLink to="/expenses" className="quick-action"><span>↓</span><b>Record expense</b><small>Log money out</small></NavLink>}
+          {can('statements.import') && <NavLink to="/statements" className="quick-action"><span>⌁</span><b>Import statement</b><small>Review bank activity</small></NavLink>}
+          {can('reports.view') && <NavLink to="/reports" className="quick-action"><span>↗</span><b>View reports</b><small>Understand performance</small></NavLink>}
+        </div>
+      </section>
+      {attention.length > 0 && <section className="attention-card" role="status"><b>{attention.length} account{attention.length === 1 ? '' : 's'} need attention</b><span>{attention.map((account) => accountLabel(account)).join(', ')} {attention.length === 1 ? 'is' : 'are'} below zero.</span></section>}
       {summary && (
         <div className="cards">
           <div className="card stat">Income ({summary.income.count})<b>{formatNaira(summary.income.total)}</b></div>

@@ -5,11 +5,12 @@ import TableWrap from '../components/TableWrap';
 import { ACTIONS, actionLabel, describeActivity } from '../utils/activity';
 import { formatDateTime } from '../utils/dates';
 import { TableSkeleton } from '../components/Skeleton';
+import { useStoredState } from '../hooks/useStoredState';
 
 const LIMIT = 50;
 
 export default function Activity() {
-  const [filters, setFilters] = useState({ from: '', to: '', actorId: '', action: '' });
+  const [filters, setFilters] = useStoredState('solucio:activity-filters', { from: '', to: '', actorId: '', action: '' });
   const [page, setPage] = useState(1);
   const [data, setData] = useState({ items: [], total: 0 });
   const [loaded, setLoaded] = useState(false);

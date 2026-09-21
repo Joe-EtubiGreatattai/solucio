@@ -11,6 +11,7 @@ import { formatDate } from '../utils/dates';
 import { formatNaira } from '../utils/money';
 import { accountLabel } from '../utils/labels';
 import { TableSkeleton } from '../components/Skeleton';
+import { useStoredState } from '../hooks/useStoredState';
 
 export default function Expenses() {
   const { can } = useAuth();
@@ -19,7 +20,7 @@ export default function Expenses() {
   const canVoid = can('expenses.void');
   const { accounts, error: accountsError } = useAccounts();
   const { categories, error: categoriesError } = useCategories();
-  const [filters, setFilters] = useState({ from: '', to: '', status: 'all', type: '' });
+  const [filters, setFilters] = useStoredState('solucio:expense-filters', { from: '', to: '', status: 'all', type: '' });
   const [data, setData] = useState({ items: [], total: 0 });
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState('');

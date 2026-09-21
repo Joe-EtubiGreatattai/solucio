@@ -30,6 +30,7 @@ export default function BankStatements() {
   const [uploading, setUploading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [showImport, setShowImport] = useState(false);
+  const [reviewOnly, setReviewOnly] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -50,6 +51,21 @@ export default function BankStatements() {
   const statement = statements.find((entry) => entry._id === selectedId);
   const transaction = statement?.transactions.find((entry) => entry._id === selectedTransactionId) || statement?.transactions[0];
   const unresolved = statement?.transactions.filter((entry) => entry.confidence === 'needs-review').length || 0;
+  const visibleTransactions = statement?.transactions.filter((entry) => !reviewOnly || entry.confidence === 'needs-review') || [];
+  const reviewIndex = visibleTransactions.findIndex((entry) => entry._id === transaction?._id);
+
+  useEffect(() => {
+    const onKeyDown = (event) => {
+      if (!statement || ['INPUT', 'SELECT', 'TEXTAREA'].includes(event.target.tagName)) return;
+      const direction = event.key === 'j' || event.key === 'ArrowDown' ? 1 : event.key === 'k' || event.key === 'ArrowUp' ? -1 : 0;
+      if (!direction || !visibleTransactions.length) return;
+      event.preventDefault();
+      const next = visibleTransactions[Math.max(0, Math.min(visibleTransactions.length - 1, reviewIndex + direction))];
+      if (next) setSelectedTransactionId(next._id);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [statement, visibleTransactions, reviewIndex]);
 
   const upload = async (event) => {
     event.preventDefault();
@@ -80,6 +96,10 @@ export default function BankStatements() {
     try {
       const updated = await api.patch(`/statements/${statement._id}/transactions/${transaction._id}`, changes);
       setStatements((current) => current.map((entry) => entry._id === updated._id ? updated : entry));
+      if (reviewOnly && changes.confidence === 'high') {
+        const next = updated.transactions.find((entry) => entry.confidence === 'needs-review');
+        setSelectedTransactionId(next?._id || '');
+      }
       setNotice('Transaction review saved.');
       setError('');
     } catch (err) {
@@ -150,21 +170,22 @@ export default function BankStatements() {
 
               <div className="statement-review-split">
                 <div className="card statement-table-card">
-                  <div className="statement-table-head"><div><h2>Transactions</h2><p>Select a row to edit its category.</p></div><span>{statement.transactions.filter((entry) => entry.direction === 'income').length} income · {statement.transactions.filter((entry) => entry.direction === 'expense').length} expenses</span></div>
+                  <div className="statement-table-head"><div><h2>Transactions</h2><p>Select a row to edit its category.</p></div><div className="statement-table-actions"><button type="button" className={reviewOnly ? '' : 'secondary'} onClick={() => { setReviewOnly((current) => !current); const first = statement.transactions.find((entry) => entry.confidence === 'needs-review'); if (first) setSelectedTransactionId(first._id); }}>{reviewOnly ? 'Show all' : `Review queue (${unresolved})`}</button><span>{statement.transactions.filter((entry) => entry.direction === 'income').length} income · {statement.transactions.filter((entry) => entry.direction === 'expense').length} expenses</span></div></div>
                   <div className="table-wrap" role="region" aria-label="Statement transactions">
                     <table className="statement-table"><thead><tr><th>Date</th><th>Transaction</th><th>Category</th><th>Review</th><th className="num">Amount</th></tr></thead><tbody>
-                      {statement.transactions.map((entry) => <tr key={entry._id} className={transaction?._id === entry._id ? 'selected-row' : ''} onClick={() => setSelectedTransactionId(entry._id)}><td>{formatDate(entry.date)}</td><td><b>{entry.narration}</b>{entry.reference && <small>{entry.reference}</small>}</td><td>{categoryLabel(entry)}</td><td><span className={`confidence ${entry.confidence}`}>{confidenceLabel(entry.confidence)}</span></td><td className={`num ${entry.direction}`}>{entry.direction === 'income' ? '+' : '−'}{formatNaira(entry.amount)}</td></tr>)}
+                      {visibleTransactions.map((entry) => <tr key={entry._id} className={transaction?._id === entry._id ? 'selected-row' : ''} onClick={() => setSelectedTransactionId(entry._id)}><td>{formatDate(entry.date)}</td><td><b>{entry.narration}</b>{entry.reference && <small>{entry.reference}</small>}</td><td>{categoryLabel(entry)}</td><td><span className={`confidence ${entry.confidence}`}>{confidenceLabel(entry.confidence)}</span></td><td className={`num ${entry.direction}`}>{entry.direction === 'income' ? '+' : '−'}{formatNaira(entry.amount)}</td></tr>)}
                     </tbody></table>
                   </div>
                 </div>
 
                 {transaction && <aside className="card transaction-editor">
-                  <div><p className="statement-eyebrow">REVIEWING TRANSACTION</p><h2>{transaction.narration}</h2><p>{formatDate(transaction.date)} · {transaction.direction === 'income' ? 'Money in' : 'Money out'} · {formatNaira(transaction.amount)}</p></div>
+                  <div><p className="statement-eyebrow">REVIEWING TRANSACTION {reviewIndex >= 0 ? `${reviewIndex + 1} OF ${visibleTransactions.length}` : ''}</p><h2>{transaction.narration}</h2><p>{formatDate(transaction.date)} · {transaction.direction === 'income' ? 'Money in' : 'Money out'} · {formatNaira(transaction.amount)}</p></div>
                   {statement.status === 'review' && can('statements.review') ? <div className="transaction-controls">
                     <label className="field"><span>Type</span><select value={transaction.type || selectedType?.type || ''} onChange={(event) => saveTransaction({ type: event.target.value, group: '', item: null, confidence: 'needs-review' })}>{categories.map((entry) => <option key={entry.type} value={entry.type}>{entry.type}</option>)}</select></label>
                     <label className="field"><span>Group</span><select value={transaction.group || selectedGroup?.name || ''} onChange={(event) => saveTransaction({ type: selectedType?.type, group: event.target.value, item: null, confidence: 'needs-review' })}>{selectedType?.groups.map((entry) => <option key={entry.name} value={entry.name}>{entry.name}</option>)}</select></label>
                     {selectedGroup?.items?.length > 0 && <label className="field"><span>Item</span><select value={transaction.item || ''} onChange={(event) => saveTransaction({ item: event.target.value, confidence: 'needs-review' })}><option value="">Choose item</option>{selectedGroup.items.map((entry) => <option key={entry} value={entry}>{entry}</option>)}</select></label>}
                     <button type="button" onClick={() => saveTransaction({ confidence: 'high' })}>Mark reviewed</button>
+                    <div className="review-navigation"><button type="button" className="secondary" disabled={reviewIndex <= 0} onClick={() => setSelectedTransactionId(visibleTransactions[reviewIndex - 1]._id)}>Previous</button><button type="button" className="secondary" disabled={reviewIndex >= visibleTransactions.length - 1} onClick={() => setSelectedTransactionId(visibleTransactions[reviewIndex + 1]._id)}>Next</button></div>
                   </div> : <span className="approved-lock">This statement is locked</span>}
                 </aside>}
               </div>

@@ -8,10 +8,11 @@ import { rangeFor } from '../utils/dates';
 import { formatNaira } from '../utils/money';
 import { downloadBlob } from '../utils/download';
 import { Skeleton } from '../components/Skeleton';
+import { useStoredState } from '../hooks/useStoredState';
 
 export default function Reports() {
   const { can } = useAuth();
-  const [range, setRange] = useState(rangeFor('month'));
+  const [range, setRange] = useStoredState('solucio:report-range', rangeFor('month'));
   const [report, setReport] = useState(null);
   const [error, setError] = useState('');
   const [exportType, setExportType] = useState('summary');
