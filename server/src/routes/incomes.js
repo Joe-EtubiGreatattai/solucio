@@ -12,6 +12,7 @@ const { dateFilter, statusFilter } = require('../utils/filters');
 const { nextReceiptNumber } = require('../services/receiptNumber');
 const { voidRecord } = require('../services/voidRecord');
 const { logAudit } = require('../services/audit');
+const { renderReceipt } = require('../services/receiptPdf');
 
 const createSchema = z.object({
   amount,
@@ -56,6 +57,14 @@ router.get('/', validate(listQuery, 'query'), asyncHandler(async (req, res) => {
 
 router.post('/:id/void', validate(voidBody), asyncHandler(async (req, res) => {
   res.json(await voidRecord(Income, req.params.id, req.validated.body.reason, req.user, 'income.void'));
+}));
+
+router.get('/:id/receipt', asyncHandler(async (req, res) => {
+  const income = await Income.findById(req.params.id).populate('account').populate('recordedBy', 'name');
+  if (!income) throw new AppError(404, 'Receipt not found');
+  const pdf = await renderReceipt(income);
+  res.set({ 'Content-Type': 'application/pdf', 'Content-Disposition': `inline; filename="${income.receiptNumber}.pdf"` });
+  res.send(pdf);
 }));
 
 module.exports = router;
