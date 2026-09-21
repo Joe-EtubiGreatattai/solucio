@@ -1,6 +1,7 @@
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const User = require('../src/models/User');
+const Account = require('../src/models/Account');
 
 let n = 0;
 async function createUser(role = 'admin', overrides = {}) {
@@ -17,4 +18,10 @@ async function createUser(role = 'admin', overrides = {}) {
 }
 const auth = (token) => ({ Authorization: `Bearer ${token}` });
 
-module.exports = { createUser, auth };
+async function makeAccount(overrides = {}) {
+  return Account.create({
+    name: 'Main Account', type: 'bank', bankName: 'GTBank', accountNumber: '0123456789', openingBalance: 0, ...overrides,
+  });
+}
+
+module.exports = { createUser, auth, makeAccount };
