@@ -1,0 +1,32 @@
+:root { --bg:#f6f7f9; --card:#fff; --ink:#1c2430; --muted:#6b7683; --line:#dfe3e8; --brand:#1f6f8b; --danger:#b3261e; }
+* { box-sizing: border-box; }
+body { margin:0; font-family: system-ui, sans-serif; background:var(--bg); color:var(--ink); }
+.topbar { display:flex; gap:24px; align-items:center; padding:12px 24px; background:var(--card); border-bottom:1px solid var(--line); }
+.topbar nav { display:flex; gap:16px; flex:1; }
+.topbar a { color:var(--muted); text-decoration:none; padding:4px 0; }
+.topbar a.active { color:var(--brand); border-bottom:2px solid var(--brand); }
+main { max-width:1100px; margin:24px auto; padding:0 16px; }
+.card { background:var(--card); border:1px solid var(--line); border-radius:8px; padding:16px; margin-bottom:16px; }
+.login { max-width:360px; margin:15vh auto; }
+.grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; align-items:end; }
+.field { display:flex; flex-direction:column; gap:4px; font-size:14px; }
+.field label { display:flex; flex-direction:column; gap:4px; }
+input, select, textarea, button { font:inherit; padding:8px; border:1px solid var(--line); border-radius:6px; background:#fff; }
+button { cursor:pointer; background:var(--brand); color:#fff; border-color:var(--brand); }
+button:disabled { opacity:.6; cursor:default; }
+button.secondary { background:#fff; color:var(--brand); }
+button.danger { background:var(--danger); border-color:var(--danger); }
+.error { color:var(--danger); font-size:13px; }
+.notice { background:#e8f4ee; border:1px solid #b9dcc6; padding:8px 12px; border-radius:6px; margin-bottom:12px; }
+table { width:100%; border-collapse:collapse; font-size:14px; }
+th, td { text-align:left; padding:8px; border-bottom:1px solid var(--line); }
+td.num, th.num { text-align:right; font-variant-numeric:tabular-nums; }
+tr.void td { color:var(--muted); text-decoration:line-through; }
+tr.void td:last-child, tr.void td.keep { text-decoration:none; }
+.cards { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:12px; }
+.stat b { display:block; font-size:22px; margin-top:4px; }
+.row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+.modal { position:fixed; inset:0; background:rgba(0,0,0,.35); display:grid; place-items:center; }
+.modal .card { width:min(420px,92vw); }
+.center { text-align:center; margin-top:20vh; }
+@media (max-width:640px) { .topbar { flex-wrap:wrap; gap:8px; } }
