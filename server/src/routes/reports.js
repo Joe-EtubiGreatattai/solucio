@@ -3,8 +3,13 @@ const { z } = require('zod');
 const { authenticate, requireRole } = require('../middleware/auth');
 const validate = require('../middleware/validate');
 const asyncHandler = require('../utils/asyncHandler');
-const { isoDate } = require('../utils/schemas');
-const reports = require('../services/reports');
+
+// Define isoDate schema inline to avoid loading schemas.js at module init time
+const { parseLagosDate } = require('../utils/dates');
+const validDate = (s) => {
+  try { parseLagosDate(s); return true; } catch { return false; }
+};
+const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use the format YYYY-MM-DD').refine(validDate, 'Invalid date');
 
 const rangeShape = { from: isoDate, to: isoDate };
 const ordered = (d) => d.from <= d.to;
@@ -14,17 +19,21 @@ const balancesQuery = z.object({ asOf: isoDate.optional() });
 
 router.use(authenticate, requireRole('accountant', 'admin'));
 
+// Lazy-load reports service to defer Mongoose model initialization
 router.get('/summary', validate(rangeQuery, 'query'), asyncHandler(async (req, res) => {
+  const reports = require('../services/reports');
   const { from, to } = req.validated.query;
   res.json(await reports.summary(from, to));
 }));
 
 router.get('/spending-by-category', validate(rangeQuery, 'query'), asyncHandler(async (req, res) => {
+  const reports = require('../services/reports');
   const { from, to } = req.validated.query;
   res.json(await reports.spendingByCategory(from, to));
 }));
 
 router.get('/account-balances', validate(balancesQuery, 'query'), asyncHandler(async (req, res) => {
+  const reports = require('../services/reports');
   res.json(await reports.accountBalances(req.validated.query.asOf));
 }));
 
