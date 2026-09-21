@@ -1,5 +1,4 @@
 const request = require('supertest');
-const pdfParse = require('pdf-parse/lib/pdf-parse.js');
 const app = require('../src/app');
 const { createUser, auth, makeAccount } = require('./helpers');
 
@@ -9,6 +8,26 @@ const binary = (res, cb) => {
   res.on('end', () => cb(null, Buffer.concat(chunks)));
 };
 const getPdf = (token, id) => request(app).get(`/api/incomes/${id}/receipt`).set(auth(token)).buffer(true).parse(binary);
+
+// Isolate pdf-parse module per call to avoid global state pollution
+const pdfText = async (buffer) => {
+  // Clear pdf-parse from require cache and reload in isolation
+  const parsePath = require.resolve('pdf-parse/lib/pdf-parse.js');
+  delete require.cache[parsePath];
+  // Also clear the bundled pdf.js to force reinitialization
+  Object.keys(require.cache).forEach(key => {
+    if (key.includes('pdf-parse') || key.includes('pdfjs-dist')) {
+      delete require.cache[key];
+    }
+  });
+
+  let parse;
+  jest.isolateModules(() => {
+    parse = require('pdf-parse/lib/pdf-parse.js');
+  });
+  const { text } = await parse(buffer);
+  return text;
+};
 
 let cashier, income;
 beforeEach(async () => {
@@ -24,7 +43,7 @@ test('receipt PDF has the receipt details and no VOID mark', async () => {
   expect(res.status).toBe(200);
   expect(res.headers['content-type']).toMatch('application/pdf');
   expect(res.body.subarray(0, 4).toString()).toBe('%PDF');
-  const { text } = await pdfParse(res.body);
+  const text = await pdfText(res.body);
   expect(text).toContain('Test Hospital');
   expect(text).toContain('RCP-2026-0001');
   expect(text).toContain('15/01/2026');
@@ -39,7 +58,7 @@ test('receipt PDF has the receipt details and no VOID mark', async () => {
 test('voided receipt carries VOID and the reason', async () => {
   await request(app).post(`/api/incomes/${income._id}/void`).set(auth(cashier.token)).send({ reason: 'Wrong amount' });
   const res = await getPdf(cashier.token, income._id);
-  const { text } = await pdfParse(res.body);
+  const text = await pdfText(res.body);
   expect(text).toContain('VOID');
   expect(text).toContain('Wrong amount');
   expect(text).toContain('RCP-2026-0001');
