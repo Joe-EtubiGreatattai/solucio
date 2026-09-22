@@ -30,6 +30,11 @@ router.get('/account-balances', requirePermission('reports.view'), validate(bala
   res.json(await reports.accountBalances(req.validated.query.asOf));
 }));
 
+router.get('/cash-flow', requirePermission('reports.view'), validate(rangeQuery, 'query'), asyncHandler(async (req, res) => {
+  const { from, to } = req.validated.query;
+  res.json(await reports.cashFlow(from, to));
+}));
+
 const exportQuery = z
   .object({ ...rangeShape, type: z.enum(['income', 'expenses', 'summary']), format: z.enum(['xlsx', 'pdf']) })
   .refine(ordered, orderedMsg);

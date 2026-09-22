@@ -25,6 +25,7 @@ const ROUTES = [
   ['get', `/api/reports/summary?${RANGE}`, FIN],
   ['get', `/api/reports/spending-by-category?${RANGE}`, FIN],
   ['get', '/api/reports/account-balances', FIN],
+  ['get', `/api/reports/cash-flow?${RANGE}`, FIN],
   ['get', `/api/reports/export?type=income&format=xlsx&${RANGE}`, FIN],
   ['get', '/api/audit-logs', ADMIN],
   ['get', '/api/categories/all', ADMIN],

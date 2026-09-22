@@ -14,11 +14,18 @@ const renderReports = (perms) =>
     </AuthContext.Provider>
   );
 
-// The page asks for two things: the spending breakdown and the summary totals.
-const emptySummary = { income: { total: 0, count: 0 }, spending: { total: 0, count: 0 }, net: 0 };
+// The page asks for two things: the spending breakdown and the cash-flow analysis.
+const emptyCashFlow = {
+  range: { from: '', to: '' }, bucket: 'day', series: [],
+  totals: { income: 0, expenses: 0, net: 0, cashOnHand: 0 },
+  previous: { income: 0, expenses: 0, net: 0 },
+  change: { income: 0, expenses: 0, net: 0 },
+  burnRate: { avgDailyNet: 0, runwayDays: null },
+  topOutflows: [], incomeByMethod: [],
+};
 beforeEach(() => {
   vi.clearAllMocks();
-  api.get.mockImplementation((path) => Promise.resolve(path === '/reports/summary' ? emptySummary : { grandTotal: 0, types: [] }));
+  api.get.mockImplementation((path) => Promise.resolve(path === '/reports/cash-flow' ? emptyCashFlow : { grandTotal: 0, types: [] }));
 });
 
 test('exports are offered only to roles that may export', async () => {
