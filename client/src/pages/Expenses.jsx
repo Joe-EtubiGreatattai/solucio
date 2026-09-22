@@ -22,7 +22,7 @@ export default function Expenses() {
   const canVoid = can('expenses.void');
   const { accounts, error: accountsError } = useAccounts();
   const { categories, error: categoriesError } = useCategories();
-  const [filters, setFilters] = useStoredState('solucio:expense-filters', { from: '', to: '', status: 'all', type: '' });
+  const [filters, setFilters] = useStoredState('solucio:expense-filters', { from: '', to: '', status: 'all', type: '', group: '', item: '' });
   const [data, setData] = useState({ items: [], total: 0 });
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState('');
@@ -47,8 +47,13 @@ export default function Expenses() {
     load();
   };
   const setFilter = (k) => (e) => setFilters({ ...filters, [k]: e.target.value });
-  const filtered = !!(filters.from || filters.to || filters.type || filters.status !== 'all');
+  // Type, group and item cascade like the record form: choosing a different level upstream clears what's below it.
+  const setTypeFilter = (e) => setFilters({ ...filters, type: e.target.value, group: '', item: '' });
+  const setGroupFilter = (e) => setFilters({ ...filters, group: e.target.value, item: '' });
+  const filtered = !!(filters.from || filters.to || filters.type || filters.group || filters.item || filters.status !== 'all');
   const categoryPath = (e) => [e.type, e.group, e.item].filter(Boolean).join(' › ');
+  const groupsForType = (categories.find((c) => c.type === filters.type) || {}).groups || [];
+  const itemsForGroup = (groupsForType.find((g) => g.name === filters.group) || {}).items || [];
 
   return (
     <>
@@ -70,11 +75,27 @@ export default function Expenses() {
           <Field label="From"><input type="date" value={filters.from} onChange={setFilter('from')} /></Field>
           <Field label="To"><input type="date" value={filters.to} onChange={setFilter('to')} /></Field>
           <Field label="Type">
-            <select value={filters.type} onChange={setFilter('type')}>
+            <select value={filters.type} onChange={setTypeFilter}>
               <option value="">All</option>
               {categories.map((c) => <option key={c.type} value={c.type}>{c.type}</option>)}
             </select>
           </Field>
+          {filters.type && (
+            <Field label="Group">
+              <select value={filters.group} onChange={setGroupFilter}>
+                <option value="">All</option>
+                {groupsForType.map((g) => <option key={g.name} value={g.name}>{g.name}</option>)}
+              </select>
+            </Field>
+          )}
+          {itemsForGroup.length > 0 && (
+            <Field label="Item">
+              <select value={filters.item} onChange={setFilter('item')}>
+                <option value="">All</option>
+                {itemsForGroup.map((i) => <option key={i} value={i}>{i}</option>)}
+              </select>
+            </Field>
+          )}
           <Field label="Status">
             <select value={filters.status} onChange={setFilter('status')}>
               <option value="all">All</option><option value="active">Active</option><option value="voided">Void</option>

@@ -3,6 +3,8 @@ const express = require('express');
 const { z } = require('zod');
 const Statement = require('../models/Statement');
 const Account = require('../models/Account');
+const Income = require('../models/Income');
+const Expense = require('../models/Expense');
 const { authenticate, requirePermission } = require('../middleware/auth');
 const validate = require('../middleware/validate');
 const asyncHandler = require('../utils/asyncHandler');
@@ -10,15 +12,25 @@ const AppError = require('../utils/AppError');
 const { objectId } = require('../utils/schemas');
 const { extractTransactions } = require('../services/statementParser');
 const { logAudit } = require('../services/audit');
+const { nextReceiptNumber } = require('../services/receiptNumber');
+const { assertValidCategory } = require('../services/categories');
 
 const router = express.Router();
 const listQuery = z.object({ accountId: objectId.optional() });
 const updateBody = z.object({
-  type: z.string().trim().max(60).optional(),
-  group: z.string().trim().max(60).optional(),
+  type: z.string().trim().max(60).nullable().optional(),
+  group: z.string().trim().max(60).nullable().optional(),
   item: z.string().trim().max(60).nullable().optional(),
   confidence: z.enum(['high', 'medium', 'needs-review']).optional(),
+  // Lets a reviewer correct the parser's income/expense guess before approving.
+  direction: z.enum(['income', 'expense']).optional(),
+  // Whether this row should be imported at all when the statement is approved.
+  included: z.boolean().optional(),
 });
+const includeBody = z.object({ scope: z.enum(['all', 'income', 'expense']) });
+
+const LAGOS_OFFSET_MS = 60 * 60 * 1000; // matches utils/dates.js: UTC+1, no DST
+const lagosYear = (date) => new Date(date.getTime() + LAGOS_OFFSET_MS).getUTCFullYear();
 
 router.use(authenticate);
 
@@ -69,17 +81,84 @@ router.patch('/:id/transactions/:transactionId', requirePermission('statements.r
   res.json(present(await Statement.findById(statement._id).populate('account', 'name bankName accountNumber').populate('uploadedBy', 'name').populate('approvedBy', 'name')));
 }));
 
+// One click to keep only the income rows, only the expense rows, or bring everything back.
+router.patch('/:id/include', requirePermission('statements.review'), validate(includeBody), asyncHandler(async (req, res) => {
+  const statement = await Statement.findById(req.params.id);
+  if (!statement) throw new AppError(404, 'Statement not found');
+  if (statement.status === 'approved') throw new AppError(409, 'Approved statements cannot be changed');
+  const { scope } = req.validated.body;
+  let changed = 0;
+  for (const transaction of statement.transactions) {
+    const next = scope === 'all' ? true : transaction.direction === scope;
+    if (transaction.included !== next) { transaction.included = next; changed += 1; }
+  }
+  await statement.save();
+  await logAudit({ actor: req.user._id, action: 'statement.bulk-include', targetModel: 'Statement', targetId: statement._id, details: { fileName: statement.fileName, scope, changed } });
+  res.json(present(await Statement.findById(statement._id).populate('account', 'name bankName accountNumber').populate('uploadedBy', 'name').populate('approvedBy', 'name')));
+}));
+
 router.post('/:id/approve', requirePermission('statements.approve'), asyncHandler(async (req, res) => {
   const statement = await Statement.findById(req.params.id);
   if (!statement) throw new AppError(404, 'Statement not found');
   if (statement.status === 'approved') throw new AppError(409, 'This statement is already approved');
-  const unresolved = statement.transactions.filter((transaction) => transaction.confidence === 'needs-review');
+
+  // Excluded rows are left out entirely: they don't need review and they never become records.
+  const included = statement.transactions.filter((transaction) => transaction.included !== false);
+  if (included.length === 0) throw new AppError(400, 'Choose at least one transaction to import');
+  const unresolved = included.filter((transaction) => transaction.confidence === 'needs-review');
   if (unresolved.length) throw new AppError(409, `${unresolved.length} transaction${unresolved.length === 1 ? '' : 's'} still need review`);
+
+  // Check every included expense against the current category tree before posting anything,
+  // so a half-imported statement can never happen.
+  for (const transaction of included) {
+    if (transaction.direction !== 'expense') continue;
+    try {
+      await assertValidCategory(transaction.type, transaction.group, transaction.item);
+    } catch (err) {
+      if (!(err instanceof AppError)) throw err;
+      throw new AppError(409, `"${transaction.narration}" has a category that no longer exists. Fix it before approving.`);
+    }
+  }
+
+  const account = await Account.findById(statement.account);
+  if (!account || !account.active) throw new AppError(400, 'The account for this statement is no longer active.');
+
+  for (const transaction of included) {
+    if (transaction.direction === 'income') {
+      const receiptNumber = await nextReceiptNumber(String(lagosYear(transaction.date)));
+      const income = await Income.create({
+        amount: transaction.amount, date: transaction.date, method: 'transfer', account: account._id,
+        receiptNumber, recordedBy: req.user._id,
+      });
+      await logAudit({
+        actor: req.user._id, action: 'income.create', targetModel: 'Income', targetId: income._id,
+        details: { receiptNumber, amount: transaction.amount, source: 'statement', fileName: statement.fileName },
+      });
+      transaction.postedModel = 'Income';
+      transaction.postedId = income._id;
+    } else {
+      const expense = await Expense.create({
+        amount: transaction.amount, date: transaction.date, account: account._id,
+        type: transaction.type, group: transaction.group, item: transaction.item || null,
+        note: `Imported from ${statement.fileName}`, recordedBy: req.user._id,
+      });
+      await logAudit({
+        actor: req.user._id, action: 'expense.create', targetModel: 'Expense', targetId: expense._id,
+        details: { amount: transaction.amount, type: transaction.type, group: transaction.group, item: transaction.item || null, source: 'statement', fileName: statement.fileName },
+      });
+      transaction.postedModel = 'Expense';
+      transaction.postedId = expense._id;
+    }
+  }
+
   statement.status = 'approved';
   statement.approvedBy = req.user._id;
   statement.approvedAt = new Date();
   await statement.save();
-  await logAudit({ actor: req.user._id, action: 'statement.approve', targetModel: 'Statement', targetId: statement._id, details: { fileName: statement.fileName, transactions: statement.transactions.length } });
+  await logAudit({
+    actor: req.user._id, action: 'statement.approve', targetModel: 'Statement', targetId: statement._id,
+    details: { fileName: statement.fileName, transactions: statement.transactions.length, posted: included.length },
+  });
   res.json(present(await Statement.findById(statement._id).populate('account', 'name bankName accountNumber').populate('uploadedBy', 'name').populate('approvedBy', 'name')));
 }));
 

@@ -1,4 +1,5 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { AuthContext } from '../auth/AuthContext';
 import Expenses from './Expenses';
@@ -41,4 +42,60 @@ test('record only: can record but never asks for the list', async () => {
   expect(await screen.findByRole('button', { name: 'Record expense' })).toBeInTheDocument();
   expect(screen.queryByRole('region', { name: 'Expense entries' })).toBeNull();
   expect(api.get).not.toHaveBeenCalledWith('/expenses', expect.anything());
+});
+
+describe('filtering by category, group and item', () => {
+  const richCategories = [{
+    type: 'Recurrent',
+    groups: [
+      { name: 'Staff Wages', items: [] },
+      { name: 'Hospital Consumables', items: ['Oxygen', 'Drugs'] },
+    ],
+  }];
+  const expenseCalls = () => api.get.mock.calls.filter((c) => c[0] === '/expenses').map((c) => c[1]);
+
+  beforeEach(() => {
+    api.get.mockImplementation((path) => Promise.resolve(
+      path === '/accounts' ? [{ _id: 'a1', name: 'Main', type: 'cash' }]
+        : path === '/categories' ? richCategories
+          : { items: [row], total: 1 }
+    ));
+  });
+
+  test('the group filter appears once a type is chosen, and the item filter once a group with items is chosen', async () => {
+    renderExpenses(['expenses.view']);
+    await screen.findByText('Recurrent › Staff Wages');
+    expect(screen.queryByLabelText('Group')).toBeNull();
+
+    await userEvent.selectOptions(screen.getByLabelText('Type'), 'Recurrent');
+    expect(screen.getByLabelText('Group')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Item')).toBeNull();
+
+    await userEvent.selectOptions(screen.getByLabelText('Group'), 'Hospital Consumables');
+    expect(screen.getByLabelText('Item')).toBeInTheDocument();
+    expect(within(screen.getByLabelText('Item')).getByText('Oxygen')).toBeInTheDocument();
+  });
+
+  test('choosing a group or item asks the server to filter by it', async () => {
+    renderExpenses(['expenses.view']);
+    await screen.findByText('Recurrent › Staff Wages');
+    await userEvent.selectOptions(screen.getByLabelText('Type'), 'Recurrent');
+    await userEvent.selectOptions(screen.getByLabelText('Group'), 'Hospital Consumables');
+    expect(expenseCalls().at(-1)).toMatchObject({ type: 'Recurrent', group: 'Hospital Consumables' });
+
+    await userEvent.selectOptions(screen.getByLabelText('Item'), 'Oxygen');
+    expect(expenseCalls().at(-1)).toMatchObject({ type: 'Recurrent', group: 'Hospital Consumables', item: 'Oxygen' });
+  });
+
+  test('choosing a different type clears the group and item that no longer apply', async () => {
+    renderExpenses(['expenses.view']);
+    await screen.findByText('Recurrent › Staff Wages');
+    await userEvent.selectOptions(screen.getByLabelText('Type'), 'Recurrent');
+    await userEvent.selectOptions(screen.getByLabelText('Group'), 'Hospital Consumables');
+    await userEvent.selectOptions(screen.getByLabelText('Item'), 'Oxygen');
+
+    await userEvent.selectOptions(screen.getByLabelText('Type'), '');
+    expect(screen.queryByLabelText('Group')).toBeNull();
+    expect(expenseCalls().at(-1)).toMatchObject({ type: '', group: '', item: '' });
+  });
 });

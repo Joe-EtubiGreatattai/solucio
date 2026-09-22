@@ -14,6 +14,12 @@ const transactionSchema = new Schema(
     confidence: { type: String, enum: ['high', 'medium', 'needs-review'], default: 'needs-review' },
     reviewedBy: { type: Schema.Types.ObjectId, ref: 'User' },
     reviewedAt: Date,
+    // Whether this row is brought into the books when the statement is approved. Lets someone
+    // import only the income rows from a statement, or only the expenses, and leave the rest out.
+    included: { type: Boolean, default: true },
+    // Which real record this row became once the statement was approved (for traceability only).
+    postedModel: { type: String, enum: ['Income', 'Expense'] },
+    postedId: { type: Schema.Types.ObjectId },
   },
   { timestamps: false }
 );
