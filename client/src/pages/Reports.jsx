@@ -9,11 +9,13 @@ import { formatNaira } from '../utils/money';
 import { downloadBlob } from '../utils/download';
 import { Skeleton } from '../components/Skeleton';
 import { useStoredState } from '../hooks/useStoredState';
+import IncomeExpenseAnalysis from '../components/IncomeExpenseAnalysis';
 
 export default function Reports() {
   const { can } = useAuth();
   const [range, setRange] = useStoredState('solucio:report-range', rangeFor('month'));
   const [report, setReport] = useState(null);
+  const [summary, setSummary] = useState(null);
   const [error, setError] = useState('');
   const [exportType, setExportType] = useState('summary');
   const [format, setFormat] = useState('xlsx');
@@ -22,7 +24,9 @@ export default function Reports() {
   useEffect(() => {
     if (!range.from || !range.to) return;
     let ignore = false;
-    api.get('/reports/spending-by-category', range).then((r) => { if (!ignore) { setReport(r); setError(''); } }).catch((e) => { if (!ignore) setError(e.message); });
+    Promise.all([api.get('/reports/spending-by-category', range), api.get('/reports/summary', range)])
+      .then(([spending, nextSummary]) => { if (!ignore) { setReport(spending); setSummary(nextSummary); setError(''); } })
+      .catch((e) => { if (!ignore) setError(e.message); });
     return () => { ignore = true; };
   }, [range]);
 
@@ -71,6 +75,8 @@ export default function Reports() {
           </div>
         </details>
       )}
+
+      <IncomeExpenseAnalysis summary={summary} />
 
       <h2>Spending by category</h2>
       {!report && !error && <div className="card report-skeleton"><Skeleton /><Skeleton /><Skeleton /></div>}

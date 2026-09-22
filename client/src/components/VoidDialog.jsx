@@ -60,7 +60,7 @@ export default function VoidDialog({ title, onConfirm, onCancel }) {
         <Field label="Reason" error={error}>
           <textarea ref={reasonRef} rows={3} value={reason} onChange={(e) => setReason(e.target.value)} />
         </Field>
-        <div className="row">
+        <div className="row modal-actions">
           <button type="button" className="secondary" onClick={onCancel}>Cancel</button>
           <button className="danger" disabled={busy}>Void entry</button>
         </div>
