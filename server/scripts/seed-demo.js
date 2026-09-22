@@ -101,7 +101,7 @@ async function main() {
   const [main, pharmacy, petty, oldSavings] = await Account.insertMany([
     { name: 'Main Operations', type: 'bank', bankName: 'GTBank', accountNumber: '0123456789', openingBalance: naira(15000000) },
     { name: 'Pharmacy POS', type: 'bank', bankName: 'Zenith Bank', accountNumber: '2034567891', openingBalance: naira(1200000) },
-    { name: 'Petty Cash', type: 'cash', openingBalance: naira(300000) },
+    { name: 'Cash', type: 'cash', openingBalance: naira(300000) },
     { name: 'Old Savings', type: 'bank', bankName: 'First Bank', accountNumber: '3011223344', openingBalance: naira(400000), active: false },
   ]);
 
