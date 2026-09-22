@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '../../api';
+import { useLiveRefresh } from '../../realtime/RealtimeProvider';
 import { useAuth } from '../../auth/AuthContext';
 import Field from '../../components/Field';
 import TableWrap from '../../components/TableWrap';
@@ -8,6 +9,8 @@ const ADMIN = 'admin';
 const EMPTY = { name: '', email: '', password: '', role: '' };
 
 export default function UsersAdmin() {
+  const usersLive = useLiveRefresh(['users']);
+  const rolesLive = useLiveRefresh(['roles']);
   const { user: me, isAdmin } = useAuth();
   const [users, setUsers] = useState([]);
   const [roles, setRoles] = useState([]);
@@ -17,11 +20,11 @@ export default function UsersAdmin() {
 
   const load = useCallback(() => {
     api.get('/users').then(setUsers).catch((e) => setError(e.message));
-  }, []);
+  }, [usersLive]);
   useEffect(load, [load]);
   useEffect(() => {
     api.get('/roles').then((d) => setRoles(d.roles)).catch((e) => setError(e.message));
-  }, []);
+  }, [rolesLive]);
 
   // Only an admin can hand out the Admin role; everyone else who manages users never sees it.
   const choices = isAdmin ? roles : roles.filter((r) => r.key !== ADMIN);

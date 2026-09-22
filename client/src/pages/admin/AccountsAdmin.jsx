@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '../../api';
+import { useLiveRefresh } from '../../realtime/RealtimeProvider';
 import Field from '../../components/Field';
 import TableWrap from '../../components/TableWrap';
 import { formatNaira, koboToNaira, nairaToKobo } from '../../utils/money';
@@ -7,6 +8,7 @@ import { formatNaira, koboToNaira, nairaToKobo } from '../../utils/money';
 const EMPTY = { name: '', type: 'bank', bankName: '', accountNumber: '', opening: '0' };
 
 export default function AccountsAdmin() {
+  const live = useLiveRefresh(['accounts']);
   const [accounts, setAccounts] = useState([]);
   const [form, setForm] = useState(EMPTY);
   const [editingId, setEditingId] = useState(null);
@@ -16,7 +18,7 @@ export default function AccountsAdmin() {
 
   const load = useCallback(() => {
     api.get('/accounts').then(setAccounts).catch((e) => setError(e.message));
-  }, []);
+  }, [live]);
   useEffect(load, [load]);
 
   const set = (k) => (e) => setForm({ ...form, [k]: e.target.value });

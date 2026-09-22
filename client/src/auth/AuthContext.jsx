@@ -27,6 +27,9 @@ export function AuthProvider({ children }) {
     api.get('/auth/me').then(startSession).catch(logout).finally(() => setLoading(false));
   }, [logout]);
 
+  // Re-read who I am and what I may do, e.g. after an admin changed my role.
+  const refreshAccess = useCallback(() => api.get('/auth/me').then(startSession).catch(() => {}), []); // eslint-disable-line react-hooks/exhaustive-deps
+
   const login = async (email, password) => {
     const r = await api.post('/auth/login', { email, password });
     setToken(r.token);
@@ -38,11 +41,12 @@ export function AuthProvider({ children }) {
     loading,
     login,
     logout,
+    refreshAccess,
     roleName: access.roleName,
     permissions: access.permissions,
     isAdmin: !!user && user.role === 'admin',
     can: (permission) => access.permissions.includes(permission),
-  }), [user, access, loading, logout]); // eslint-disable-line react-hooks/exhaustive-deps
+  }), [user, access, loading, logout, refreshAccess]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

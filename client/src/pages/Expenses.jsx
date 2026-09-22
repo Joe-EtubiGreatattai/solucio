@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '../api';
+import { useLiveRefresh } from '../realtime/RealtimeProvider';
 import { useAuth } from '../auth/AuthContext';
 import { useAccounts } from '../hooks/useAccounts';
 import { useCategories } from '../hooks/useCategories';
@@ -14,6 +15,7 @@ import { TableSkeleton } from '../components/Skeleton';
 import { useStoredState } from '../hooks/useStoredState';
 
 export default function Expenses() {
+  const live = useLiveRefresh(['expenses']);
   const { can } = useAuth();
   const canView = can('expenses.view');
   const canRecord = can('expenses.record');
@@ -32,7 +34,7 @@ export default function Expenses() {
       .then((d) => { setData(d); setError(''); })
       .catch((e) => setError(e.message))
       .finally(() => setLoaded(true));
-  }, [filters, canView]);
+  }, [filters, canView, live]);
   useEffect(load, [load]);
 
   const record = async (payload) => {

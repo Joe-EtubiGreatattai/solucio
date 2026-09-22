@@ -1,6 +1,9 @@
 require('dotenv').config();
+const http = require('http');
 const mongoose = require('mongoose');
 const app = require('./app');
+const origins = require('./config/origins');
+const { initRealtime } = require('./realtime');
 const { ensureBuiltInRoles } = require('./services/roles');
 const { ensureDefaultCategories } = require('./services/categories');
 
@@ -15,5 +18,9 @@ mongoose
   .connect(process.env.MONGODB_URI)
   .then(() => ensureBuiltInRoles())
   .then(() => ensureDefaultCategories())
-  .then(() => app.listen(port, host, () => console.log(`Solucio Payment and Receipt API on ${host || ''}:${port}`)))
+  .then(() => {
+    const server = http.createServer(app);
+    initRealtime(server, { origins }); // live updates share the API's port and sign-in
+    server.listen(port, host, () => console.log(`Solucio Payment and Receipt API on ${host || ''}:${port} (live updates on)`));
+  })
   .catch((err) => { console.error(err); process.exit(1); });

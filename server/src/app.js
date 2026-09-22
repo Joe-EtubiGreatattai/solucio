@@ -2,6 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const routes = require('./routes');
+const origins = require('./config/origins');
 const { notFound, errorHandler } = require('./middleware/errorHandler');
 
 const app = express();
@@ -12,8 +13,6 @@ if (process.env.TRUST_PROXY) {
   app.set('trust proxy', Number.isNaN(hops) ? process.env.TRUST_PROXY : hops);
 }
 app.use(helmet());
-// One or more web addresses allowed to call the API, comma separated.
-const origins = (process.env.CLIENT_ORIGIN || 'http://localhost:5173').split(',').map((o) => o.trim()).filter(Boolean);
 app.use(cors({ origin: origins }));
 app.use(express.json());
 app.use('/api', routes);

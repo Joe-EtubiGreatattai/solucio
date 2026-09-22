@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '../../api';
+import { useLiveRefresh } from '../../realtime/RealtimeProvider';
 import Field from '../../components/Field';
 import TableWrap from '../../components/TableWrap';
 
 const EMPTY = { name: '', description: '', permissions: [] };
 
 export default function RolesAdmin() {
+  const live = useLiveRefresh(['roles', 'users']);
   const [data, setData] = useState({ roles: [], permissions: [] });
   const [form, setForm] = useState(EMPTY);
   const [editingKey, setEditingKey] = useState(null);
@@ -17,7 +19,7 @@ export default function RolesAdmin() {
 
   const load = useCallback(() => {
     api.get('/roles').then(setData).catch((e) => setError(e.message));
-  }, []);
+  }, [live]);
   useEffect(load, [load]);
 
   // The permission list comes from the server, grouped for display in the order it sends them.

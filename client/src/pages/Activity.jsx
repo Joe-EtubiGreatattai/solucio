@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api';
+import { useLiveRefresh } from '../realtime/RealtimeProvider';
 import Field from '../components/Field';
 import TableWrap from '../components/TableWrap';
 import { ACTIONS, actionLabel, describeActivity } from '../utils/activity';
@@ -10,6 +11,8 @@ import { useStoredState } from '../hooks/useStoredState';
 const LIMIT = 50;
 
 export default function Activity() {
+  const live = useLiveRefresh(['audit']);
+  const usersLive = useLiveRefresh(['users']);
   const [filters, setFilters] = useStoredState('solucio:activity-filters', { from: '', to: '', actorId: '', action: '' });
   const [page, setPage] = useState(1);
   const [data, setData] = useState({ items: [], total: 0 });
@@ -19,7 +22,7 @@ export default function Activity() {
 
   useEffect(() => {
     api.get('/users').then(setUsers).catch(() => setUsers([]));
-  }, []);
+  }, [usersLive]);
 
   useEffect(() => {
     let ignore = false;
@@ -28,7 +31,7 @@ export default function Activity() {
       .catch((e) => { if (!ignore) setError(e.message); })
       .finally(() => { if (!ignore) setLoaded(true); });
     return () => { ignore = true; };
-  }, [filters, page]);
+  }, [filters, page, live]);
 
   const setFilter = (key) => (e) => {
     setFilters({ ...filters, [key]: e.target.value });

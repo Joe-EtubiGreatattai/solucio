@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '../api';
+import { useLiveRefresh } from '../realtime/RealtimeProvider';
 import { useAuth } from '../auth/AuthContext';
 import { useAccounts } from '../hooks/useAccounts';
 import { formatDate } from '../utils/dates';
@@ -16,6 +17,8 @@ function categoryLabel(transaction) {
 }
 
 export default function BankStatements() {
+  const live = useLiveRefresh(['statements']);
+  const categoriesLive = useLiveRefresh(['categories']);
   const { can } = useAuth();
   const { accounts, error: accountsError } = useAccounts();
   const bankAccounts = accounts.filter((account) => account.type === 'bank');
@@ -43,10 +46,10 @@ export default function BankStatements() {
     } finally {
       setLoading(false);
     }
-  }, [accountId]);
+  }, [accountId, live]);
 
   useEffect(() => { load(); }, [load]);
-  useEffect(() => { api.get('/categories').then(setCategories).catch(() => setCategories([])); }, []);
+  useEffect(() => { api.get('/categories').then(setCategories).catch(() => setCategories([])); }, [categoriesLive]);
 
   const statement = statements.find((entry) => entry._id === selectedId);
   const transaction = statement?.transactions.find((entry) => entry._id === selectedTransactionId) || statement?.transactions[0];

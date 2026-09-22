@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '../api';
+import { useLiveRefresh } from '../realtime/RealtimeProvider';
 import { useAuth } from '../auth/AuthContext';
 import { useAccounts } from '../hooks/useAccounts';
 import IncomeForm from '../components/IncomeForm';
@@ -18,6 +19,7 @@ import { useStoredState } from '../hooks/useStoredState';
 const METHOD = { transfer: 'Bank transfer', pos: 'POS' };
 
 export default function Income() {
+  const live = useLiveRefresh(['incomes']);
   const { can } = useAuth();
   const canView = can('income.view');
   const canRecord = can('income.record');
@@ -36,7 +38,7 @@ export default function Income() {
       .then((d) => { setData(d); setError(''); })
       .catch((e) => setError(e.message))
       .finally(() => setLoaded(true));
-  }, [filters, canView]);
+  }, [filters, canView, live]);
   useEffect(load, [load]);
 
   const record = async (payload) => {

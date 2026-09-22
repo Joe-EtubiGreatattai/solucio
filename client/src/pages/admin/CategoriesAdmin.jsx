@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
 import { api } from '../../api';
+import { useLiveRefresh } from '../../realtime/RealtimeProvider';
 import Field from '../../components/Field';
 
 export default function CategoriesAdmin() {
+  const live = useLiveRefresh(['categories']);
   const [tree, setTree] = useState([]);
   const [drafts, setDrafts] = useState({});
   const [fieldError, setFieldError] = useState({});
@@ -10,7 +12,7 @@ export default function CategoriesAdmin() {
 
   useEffect(() => {
     api.get('/categories/all').then(setTree).catch((e) => setError(e.message));
-  }, []);
+  }, [live]);
 
   const setDraft = (key, value) => setDrafts((d) => ({ ...d, [key]: value }));
   // Every change returns the whole tree, so the screen always shows exactly what the server has.

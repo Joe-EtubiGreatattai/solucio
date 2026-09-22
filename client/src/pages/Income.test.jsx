@@ -6,8 +6,10 @@ import Income from './Income';
 import { api } from '../api';
 import { viewReceipt } from '../utils/receipt';
 import { features } from '../features';
+import { renderLive } from '../test/live';
+import { waitFor, act } from '@testing-library/react';
 
-vi.mock('../api', () => ({ api: { get: vi.fn(), post: vi.fn() } }));
+vi.mock('../api', () => ({ api: { get: vi.fn(), post: vi.fn() }, API_BASE: '', getToken: () => null }));
 vi.mock('../utils/receipt', () => ({ viewReceipt: vi.fn().mockResolvedValue() }));
 
 const ALL = ['income.view', 'income.record', 'income.void'];
@@ -151,5 +153,31 @@ describe('the receipt PDF switch (features.receipts)', () => {
     api.get.mockImplementation((path) => Promise.resolve(path === '/accounts' ? accounts : { items: [row], total: 1 }));
     renderIncome();
     expect(await screen.findByRole('button', { name: 'View receipt RCP-2026-0042' })).toBeInTheDocument();
+  });
+});
+
+describe('live updates', () => {
+  const calls = (path) => api.get.mock.calls.filter((c) => c[0] === path).length;
+
+  test('the list reloads when someone else records or voids income', async () => {
+    const { socket } = renderLive(<MemoryRouter><Income /></MemoryRouter>);
+    await waitFor(() => expect(calls('/incomes')).toBe(1));
+    act(() => socket.fire('data:changed', { resource: 'incomes', action: 'create', id: 'x' }));
+    await waitFor(() => expect(calls('/incomes')).toBe(2));
+  });
+
+  test('a change to something else does not reload it', async () => {
+    const { socket } = renderLive(<MemoryRouter><Income /></MemoryRouter>);
+    await waitFor(() => expect(calls('/incomes')).toBe(1));
+    act(() => socket.fire('data:changed', { resource: 'expenses', action: 'create', id: 'x' }));
+    await new Promise((r) => setTimeout(r, 450));
+    expect(calls('/incomes')).toBe(1);
+  });
+
+  test('the account choices refresh when an account is added', async () => {
+    const { socket } = renderLive(<MemoryRouter><Income /></MemoryRouter>);
+    await waitFor(() => expect(calls('/accounts')).toBe(1));
+    act(() => socket.fire('data:changed', { resource: 'accounts', action: 'create', id: 'x' }));
+    await waitFor(() => expect(calls('/accounts')).toBe(2));
   });
 });

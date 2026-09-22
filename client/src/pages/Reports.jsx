@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from 'recharts';
 import { api } from '../api';
+import { useLiveRefresh } from '../realtime/RealtimeProvider';
 import { useAuth } from '../auth/AuthContext';
 import DateRange from '../components/DateRange';
 import Field from '../components/Field';
@@ -12,6 +13,7 @@ import { useStoredState } from '../hooks/useStoredState';
 import IncomeExpenseAnalysis from '../components/IncomeExpenseAnalysis';
 
 export default function Reports() {
+  const live = useLiveRefresh(['reports']);
   const { can } = useAuth();
   const [range, setRange] = useStoredState('solucio:report-range', rangeFor('month'));
   const [report, setReport] = useState(null);
@@ -28,7 +30,7 @@ export default function Reports() {
       .then(([spending, nextSummary]) => { if (!ignore) { setReport(spending); setSummary(nextSummary); setError(''); } })
       .catch((e) => { if (!ignore) setError(e.message); });
     return () => { ignore = true; };
-  }, [range]);
+  }, [range, live]);
 
   const chart = report ? report.types.flatMap((t) => t.groups.map((g) => ({ name: `${t.type}: ${g.group}`, amount: g.total, percent: g.percent }))) : [];
   const colours = ['#8964ee', '#b29af7', '#64c7ad', '#f2ad6e', '#ee7f98', '#6a91d9', '#d6c6fa'];

@@ -46,3 +46,27 @@ Server settings: `NODE_ENV=production`, `PORT=5001`, `HOST=127.0.0.1` (only ngin
 **Web app:** `client/.env.production` holds `VITE_API_URL=https://solucio.techtree.lifestyle`. It is not a secret, it is committed, and Vite uses it automatically for every production build (`npm run build`, and builds on Vercel). To use a different API, change that file. Add the web app's address to `CLIENT_ORIGIN` on the server.
 
 **Careful:** the server and your laptop can point at the same Atlas database. Give local development its own database name (for example `.../solucio_dev`) so tests and `seed:demo --reset` can never touch live data.
+
+## Live updates
+
+Screens update by themselves when anyone changes data: income, expenses, accounts, categories, users, roles, bank statements, reports, the dashboard and the activity log. It uses Socket.IO on the same address and port as the API.
+
+- **The socket carries no data.** It only says what changed (`{ resource: "incomes", action: "create", id }`). The screen then re-fetches through the normal API, so every permission rule still applies in one place.
+- **Same sign-in, same permissions.** A connection needs your sign-in token, and each person only hears about the kinds of data their role may view (income viewers hear about income, only people who may view the activity log hear about activity, and so on).
+- **One hook covers everything.** Every change in the app already writes an activity-log entry, and `server/src/services/audit.js` announces it from there, so no action can be forgotten. The resource mapping is in `server/src/realtime.js`.
+- **Access changes apply live.** When an admin changes a role, or deactivates a user, that person's open connection is re-checked at once: their screens get their new permissions, or they are signed out. A connection also ends when its sign-in token expires.
+- **Client:** `useLiveRefresh(['incomes'])` returns a number that goes up when that data changes. Put it in a data-loading effect's dependencies and the screen reloads itself. Bursts are grouped into one reload, and after a dropped connection comes back every screen catches up.
+- **Development:** Vite proxies `/socket.io` to the API (see `client/vite.config.js`).
+- **Production (nginx):** it works through the existing proxy (it falls back to long polling). For a proper websocket, add this inside the site's `server { }` in `/etc/nginx/conf.d/solucio-backend.conf`, then `nginx -t && systemctl reload nginx`:
+
+```nginx
+    location /socket.io/ {
+        proxy_pass http://127.0.0.1:5001;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_read_timeout 3600s;
+    }
+```

@@ -2,8 +2,10 @@ import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import Activity from './Activity';
 import { api } from '../api';
+import { renderLive } from '../test/live';
+import { waitFor, act } from '@testing-library/react';
 
-vi.mock('../api', () => ({ api: { get: vi.fn() } }));
+vi.mock('../api', () => ({ api: { get: vi.fn() }, API_BASE: '', getToken: () => null }));
 
 const users = [
   { _id: 'u1', name: 'Chioma Okafor', role: 'cashier' },
@@ -17,6 +19,7 @@ const items = [
 const route = (page = { items, total: 3 }) => (path) => Promise.resolve(path === '/users' ? users : page);
 
 beforeEach(() => {
+  localStorage.clear(); // filters are remembered between visits, so one test's filter must not leak into the next
   vi.clearAllMocks();
   api.get.mockImplementation(route());
 });
@@ -82,4 +85,13 @@ test('shows an alert when the log cannot be loaded', async () => {
   api.get.mockImplementation((path) => (path === '/users' ? Promise.resolve(users) : Promise.reject(new Error('Cannot reach the server'))));
   render(<Activity />);
   expect(await screen.findByRole('alert')).toHaveTextContent('Cannot reach the server');
+});
+
+test('new activity appears without a refresh', async () => {
+  const { socket } = renderLive(<Activity />);
+  await screen.findByText('Recorded income');
+  const logCalls = () => api.get.mock.calls.filter((c) => c[0] === '/audit-logs').length;
+  expect(logCalls()).toBe(1);
+  act(() => socket.fire('data:changed', { resource: 'audit', action: 'create', id: 'x' }));
+  await waitFor(() => expect(logCalls()).toBe(2));
 });

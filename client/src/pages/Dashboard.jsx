@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import { api } from '../api';
+import { useLiveRefresh } from '../realtime/RealtimeProvider';
 import { useAuth } from '../auth/AuthContext';
 import DateRange from '../components/DateRange';
 import TableWrap from '../components/TableWrap';
@@ -11,6 +12,7 @@ import { DashboardSkeleton, TableSkeleton } from '../components/Skeleton';
 import { useStoredState } from '../hooks/useStoredState';
 
 export default function Dashboard() {
+  const live = useLiveRefresh(['reports']);
   const { can } = useAuth();
   const [range, setRange] = useStoredState('solucio:dashboard-range', rangeFor('month'));
   const [summary, setSummary] = useState(null);
@@ -23,10 +25,10 @@ export default function Dashboard() {
     let ignore = false;
     api.get('/reports/summary', range).then((s) => { if (!ignore) { setSummary(s); setError(''); } }).catch((e) => { if (!ignore) setError(e.message); });
     return () => { ignore = true; };
-  }, [range]);
+  }, [range, live]);
   useEffect(() => {
     api.get('/reports/account-balances').then(setBalances).catch((e) => setError(e.message));
-  }, []);
+  }, [live]);
 
   return (
     <>

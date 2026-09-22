@@ -1,6 +1,6 @@
 const TOKEN_KEY = 'solucio_token';
 // Empty in development (Vite proxies /api). Set VITE_API_URL to the API's address when the app and API live on different sites.
-const API_BASE = (import.meta.env.VITE_API_URL || '').replace(/\/+$/, '');
+export const API_BASE = (import.meta.env.VITE_API_URL || '').replace(/\/+$/, '');
 export const getToken = () => localStorage.getItem(TOKEN_KEY);
 export const setToken = (t) => (t ? localStorage.setItem(TOKEN_KEY, t) : localStorage.removeItem(TOKEN_KEY));
 

@@ -11,7 +11,7 @@ vi.mock('../api', () => ({
 }));
 
 function Probe() {
-  const { user, roleName, can, isAdmin, login, logout, loading } = useAuth();
+  const { user, roleName, can, isAdmin, login, logout, loading, refreshAccess } = useAuth();
   if (loading) return <p>loading</p>;
   return (
     <div>
@@ -22,6 +22,7 @@ function Probe() {
       <p>expenses.view: {String(can('expenses.view'))}</p>
       <button onClick={() => login('a@b.com', 'pw')}>login</button>
       <button onClick={logout}>logout</button>
+      <button onClick={refreshAccess}>refresh</button>
     </div>
   );
 }
@@ -65,4 +66,14 @@ test('outside a provider nobody is allowed to do anything', () => {
   function Bare() { const { can } = useAuth(); return <p>{String(can('income.view'))}</p>; }
   render(<Bare />);
   expect(screen.getByText('false')).toBeInTheDocument();
+});
+
+test('refreshAccess picks up a changed role without signing in again', async () => {
+  api.post.mockResolvedValue({ token: 't', user: { name: 'Chioma', role: 'front-desk' }, roleName: 'Front Desk', permissions: ['income.view'] });
+  render(<AuthProvider><Probe /></AuthProvider>);
+  await userEvent.click(screen.getByText('login'));
+  await screen.findByText('income.view: true');
+  api.get.mockResolvedValue({ user: { name: 'Chioma', role: 'front-desk' }, roleName: 'Front Desk', permissions: ['income.view', 'expenses.view'] });
+  await userEvent.click(screen.getByText('refresh'));
+  expect(await screen.findByText('expenses.view: true')).toBeInTheDocument();
 });
