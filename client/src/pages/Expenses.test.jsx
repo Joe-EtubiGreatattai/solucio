@@ -5,7 +5,7 @@ import { AuthContext } from '../auth/AuthContext';
 import Expenses from './Expenses';
 import { api } from '../api';
 
-vi.mock('../api', () => ({ api: { get: vi.fn(), post: vi.fn() } }));
+vi.mock('../api', () => ({ api: { get: vi.fn(), post: vi.fn(), blob: vi.fn() } }));
 
 const row = { _id: 'e1', date: '2026-09-20T23:00:00.000Z', type: 'Recurrent', group: 'Staff Wages', item: null, amount: 100000, account: { name: 'Main', type: 'cash' }, voided: false };
 const renderExpenses = (perms) =>
@@ -97,5 +97,20 @@ describe('filtering by category, group and item', () => {
     await userEvent.selectOptions(screen.getByLabelText('Type'), '');
     expect(screen.queryByLabelText('Group')).toBeNull();
     expect(expenseCalls().at(-1)).toMatchObject({ type: '', group: '', item: '' });
+  });
+});
+
+describe('exporting the filtered list', () => {
+  beforeEach(() => {
+    api.blob.mockResolvedValue(new Blob(['x']));
+  });
+
+  test('exports with the current filters, sending the category type as categoryType', async () => {
+    renderExpenses(['expenses.view']);
+    await screen.findByText('Recurrent › Staff Wages');
+    await userEvent.selectOptions(screen.getByLabelText('Type'), 'Recurrent');
+    await userEvent.selectOptions(screen.getByLabelText('Format'), 'pdf');
+    await userEvent.click(screen.getByRole('button', { name: 'Export' }));
+    expect(api.blob).toHaveBeenCalledWith('/reports/export', expect.objectContaining({ type: 'expenses', format: 'pdf', categoryType: 'Recurrent' }));
   });
 });

@@ -9,7 +9,7 @@ import { features } from '../features';
 import { renderLive } from '../test/live';
 import { waitFor, act } from '@testing-library/react';
 
-vi.mock('../api', () => ({ api: { get: vi.fn(), post: vi.fn() }, API_BASE: '', getToken: () => null }));
+vi.mock('../api', () => ({ api: { get: vi.fn(), post: vi.fn(), blob: vi.fn() }, API_BASE: '', getToken: () => null }));
 vi.mock('../utils/receipt', () => ({ viewReceipt: vi.fn().mockResolvedValue() }));
 
 const ALL = ['income.view', 'income.record', 'income.void'];
@@ -206,5 +206,27 @@ describe('filtering by method and account', () => {
     expect(incomeCalls().at(-1)).toMatchObject({ method: 'pos' });
     await userEvent.selectOptions(within(filterPanel).getByLabelText('Account'), 'a2');
     expect(incomeCalls().at(-1)).toMatchObject({ method: 'pos', accountId: 'a2' });
+  });
+});
+
+describe('exporting the filtered list', () => {
+  beforeEach(() => {
+    api.blob.mockResolvedValue(new Blob(['x']));
+  });
+
+  test('exports with the current filters and chosen format', async () => {
+    renderIncome();
+    await waitFor(() => expect(api.get).toHaveBeenCalledWith('/incomes', expect.anything()));
+    const filterPanel = screen.getByRole('group', { name: 'Income filters' });
+    await userEvent.selectOptions(within(filterPanel).getByLabelText('Method'), 'pos');
+    await userEvent.selectOptions(screen.getByLabelText('Format'), 'pdf');
+    await userEvent.click(screen.getByRole('button', { name: 'Export' }));
+    expect(api.blob).toHaveBeenCalledWith('/reports/export', expect.objectContaining({ type: 'income', format: 'pdf', method: 'pos' }));
+  });
+
+  test('a view-only role can still export', async () => {
+    renderIncome(['income.view']);
+    await waitFor(() => expect(api.get).toHaveBeenCalledWith('/incomes', expect.anything()));
+    expect(screen.getByRole('button', { name: 'Export' })).toBeInTheDocument();
   });
 });

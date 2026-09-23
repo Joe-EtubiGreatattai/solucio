@@ -13,6 +13,7 @@ import { features } from '../features';
 import { formatDate } from '../utils/dates';
 import { formatNaira } from '../utils/money';
 import { accountLabel } from '../utils/labels';
+import { downloadBlob } from '../utils/download';
 import { TableSkeleton } from '../components/Skeleton';
 import { useStoredState } from '../hooks/useStoredState';
 
@@ -31,6 +32,8 @@ export default function Income() {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState(null);
   const [voidId, setVoidId] = useState(null);
+  const [exportFormat, setExportFormat] = useState('xlsx');
+  const [exporting, setExporting] = useState(false);
 
   const load = useCallback(() => {
     if (!canView) return;
@@ -54,6 +57,18 @@ export default function Income() {
   };
   const setFilter = (k) => (e) => setFilters({ ...filters, [k]: e.target.value });
   const filtered = !!(filters.from || filters.to || filters.status !== 'all' || filters.method || filters.accountId);
+
+  const exportFile = async () => {
+    setExporting(true);
+    try {
+      const blob = await api.blob('/reports/export', { type: 'income', format: exportFormat, ...filters });
+      downloadBlob(blob, `solucio-income.${exportFormat}`);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setExporting(false);
+    }
+  };
 
   return (
     <>
@@ -105,6 +120,15 @@ export default function Income() {
           </Field>
           </div>
         </details>
+        <div className="card row export-controls">
+          <Field label="Format">
+            <select value={exportFormat} onChange={(e) => setExportFormat(e.target.value)}>
+              <option value="xlsx">Excel</option>
+              <option value="pdf">PDF</option>
+            </select>
+          </Field>
+          <button onClick={exportFile} disabled={exporting}>{exporting ? 'Preparing…' : 'Export'}</button>
+        </div>
         {(error || accountsError) && <p className="error" role="alert">{error || accountsError}</p>}
         <div className="card">
           <TableWrap label="Income entries">

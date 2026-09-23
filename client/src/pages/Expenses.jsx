@@ -11,6 +11,7 @@ import TableWrap from '../components/TableWrap';
 import { formatDate } from '../utils/dates';
 import { formatNaira } from '../utils/money';
 import { accountLabel } from '../utils/labels';
+import { downloadBlob } from '../utils/download';
 import { TableSkeleton } from '../components/Skeleton';
 import { useStoredState } from '../hooks/useStoredState';
 
@@ -27,6 +28,8 @@ export default function Expenses() {
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState('');
   const [voidId, setVoidId] = useState(null);
+  const [exportFormat, setExportFormat] = useState('xlsx');
+  const [exporting, setExporting] = useState(false);
 
   const load = useCallback(() => {
     if (!canView) return;
@@ -54,6 +57,19 @@ export default function Expenses() {
   const categoryPath = (e) => [e.type, e.group, e.item].filter(Boolean).join(' › ');
   const groupsForType = (categories.find((c) => c.type === filters.type) || {}).groups || [];
   const itemsForGroup = (groupsForType.find((g) => g.name === filters.group) || {}).items || [];
+
+  const exportFile = async () => {
+    setExporting(true);
+    try {
+      const { type, ...rest } = filters;
+      const blob = await api.blob('/reports/export', { type: 'expenses', format: exportFormat, categoryType: type, ...rest });
+      downloadBlob(blob, `solucio-expenses.${exportFormat}`);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setExporting(false);
+    }
+  };
 
   return (
     <>
@@ -103,6 +119,15 @@ export default function Expenses() {
           </Field>
           </div>
         </details>
+        <div className="card row export-controls">
+          <Field label="Format">
+            <select value={exportFormat} onChange={(e) => setExportFormat(e.target.value)}>
+              <option value="xlsx">Excel</option>
+              <option value="pdf">PDF</option>
+            </select>
+          </Field>
+          <button onClick={exportFile} disabled={exporting}>{exporting ? 'Preparing…' : 'Export'}</button>
+        </div>
         {(error || accountsError || categoriesError) && <p className="error" role="alert">{error || accountsError || categoriesError}</p>}
         <div className="card">
           <TableWrap label="Expense entries">

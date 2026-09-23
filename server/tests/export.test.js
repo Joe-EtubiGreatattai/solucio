@@ -68,3 +68,59 @@ test('export validates params', async () => {
   expect((await exportReq('type=bogus&format=xlsx&from=2026-01-01&to=2026-01-31')).status).toBe(400);
   expect((await exportReq('type=income&format=csv&from=2026-01-01&to=2026-01-31')).status).toBe(400);
 });
+
+test('summary export still needs a date range', async () => {
+  expect((await exportReq('type=summary&format=xlsx')).status).toBe(400);
+});
+
+describe('exporting with the filters shown on the Income/Expenses pages', () => {
+  test('income export honours status, method and account', async () => {
+    const other = await makeAccount({ name: 'Second Account' });
+    await makeIncome({ ...ctx, amount: 30000, method: 'pos', receiptNumber: 'RCP-C' });
+    await makeIncome({ ...ctx, account: other, amount: 40000, method: 'transfer', receiptNumber: 'RCP-D' });
+
+    const activeOnly = await exportReq('type=income&format=xlsx&status=active');
+    let wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(activeOnly.body);
+    let ws = wb.worksheets[0];
+    expect([5, 6, 7].map((r) => ws.getRow(r).getCell(2).value)).toEqual(['RCP-A', 'RCP-C', 'RCP-D']);
+
+    const posOnly = await exportReq('type=income&format=xlsx&method=pos');
+    wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(posOnly.body);
+    ws = wb.worksheets[0];
+    expect(ws.getRow(5).getCell(2).value).toBe('RCP-C');
+
+    const byAccount = await exportReq(`type=income&format=xlsx&accountId=${other._id}`);
+    wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(byAccount.body);
+    ws = wb.worksheets[0];
+    expect(ws.getRow(5).getCell(2).value).toBe('RCP-D');
+  });
+
+  test('expenses export honours category type, group and item', async () => {
+    await makeExpense({ ...ctx, amount: 5000, type: 'One-off', group: 'Equipment', item: null, note: 'A' });
+
+    const res = await exportReq('type=expenses&format=xlsx&categoryType=Recurrent&group=Hospital%20Consumables&item=Oxygen');
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(res.body);
+    const ws = wb.worksheets[0];
+    expect(ws.getRow(5).getCell(2).value).toBe('Recurrent > Hospital Consumables > Oxygen');
+    expect(ws.rowCount).toBe(6); // header rows + one matching row + total
+  });
+
+  test('income and expense exports fall back to "All dates" when no range is given', async () => {
+    const res = await exportReq('type=income&format=xlsx');
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(res.body);
+    expect(wb.worksheets[0].getRow(2).getCell(1).value).toBe('All dates');
+  });
+
+  test('a cashier can export income but not expenses or the summary', async () => {
+    const cashier = await createUser('cashier');
+    const asCashier = (q) => request(app).get(`/api/reports/export?${q}`).set(auth(cashier.token)).buffer(true).parse(binary);
+    expect((await asCashier('type=income&format=xlsx&from=2026-01-01&to=2026-01-31')).status).toBe(200);
+    expect((await asCashier('type=expenses&format=xlsx&from=2026-01-01&to=2026-01-31')).status).toBe(403);
+    expect((await asCashier('type=summary&format=xlsx&from=2026-01-01&to=2026-01-31')).status).toBe(403);
+  });
+});

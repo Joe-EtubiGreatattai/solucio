@@ -1,10 +1,11 @@
 const Income = require('../models/Income');
 const Expense = require('../models/Expense');
 const reports = require('./reports');
-const { dateFilter } = require('../utils/filters');
+const { dateFilter, statusFilter } = require('../utils/filters');
 const { formatLagosDate } = require('../utils/dates');
 
 const dmy = (s) => s.split('-').reverse().join('/');
+const subtitleFor = (from, to) => (from && to ? `${dmy(from)} to ${dmy(to)}` : from ? `From ${dmy(from)}` : to ? `Up to ${dmy(to)}` : 'All dates');
 
 const METHOD = { transfer: 'Bank transfer', pos: 'POS' };
 const populate = [['account', 'name type bankName accountNumber'], ['recordedBy', 'name']];
@@ -15,11 +16,14 @@ const accountLabel = (a) =>
 const statusOf = (r) => (r.voided ? `VOID: ${r.voidReason}` : 'Active');
 const sumActive = (items) => items.filter((i) => !i.voided).reduce((s, i) => s + i.amount, 0);
 
-async function incomeTable(from, to) {
-  const items = await withPopulate(Income.find(dateFilter(from, to)).sort({ date: 1, createdAt: 1 }));
+async function incomeTable(from, to, filters = {}) {
+  const filter = { ...dateFilter(from, to), ...statusFilter(filters.status) };
+  if (filters.accountId) filter.account = filters.accountId;
+  if (filters.method) filter.method = filters.method;
+  const items = await withPopulate(Income.find(filter).sort({ date: 1, createdAt: 1 }));
   return {
     title: 'Income',
-    subtitle: `${dmy(from)} to ${dmy(to)}`,
+    subtitle: subtitleFor(from, to),
     columns: [
       { header: 'Date', key: 'date', width: 12 },
       { header: 'Receipt No.', key: 'receiptNumber', width: 16 },
@@ -37,11 +41,16 @@ async function incomeTable(from, to) {
   };
 }
 
-async function expenseTable(from, to) {
-  const items = await withPopulate(Expense.find(dateFilter(from, to)).sort({ date: 1, createdAt: 1 }));
+async function expenseTable(from, to, filters = {}) {
+  const filter = { ...dateFilter(from, to), ...statusFilter(filters.status) };
+  if (filters.accountId) filter.account = filters.accountId;
+  if (filters.type) filter.type = filters.type;
+  if (filters.group) filter.group = filters.group;
+  if (filters.item) filter.item = filters.item;
+  const items = await withPopulate(Expense.find(filter).sort({ date: 1, createdAt: 1 }));
   return {
     title: 'Expenses',
-    subtitle: `${dmy(from)} to ${dmy(to)}`,
+    subtitle: subtitleFor(from, to),
     columns: [
       { header: 'Date', key: 'date', width: 12 },
       { header: 'Category', key: 'category', width: 44 },
@@ -77,13 +86,13 @@ async function summaryTable(from, to) {
   }
   return {
     title: 'Summary',
-    subtitle: `${dmy(from)} to ${dmy(to)}`,
+    subtitle: subtitleFor(from, to),
     columns: [{ header: 'Item', key: 'label', width: 44 }, { header: 'Amount (NGN)', key: 'amount', width: 18, type: 'money' }],
     rows,
     totals: null,
   };
 }
 
-const buildTable = (type, from, to) => ({ income: incomeTable, expenses: expenseTable, summary: summaryTable })[type](from, to);
+const buildTable = (type, from, to, filters) => ({ income: incomeTable, expenses: expenseTable, summary: summaryTable })[type](from, to, filters);
 
 module.exports = { buildTable };
