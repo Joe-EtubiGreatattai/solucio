@@ -69,6 +69,21 @@ test('bulk buttons import only income, only expenses, or everything', async () =
   expect(api.patch).toHaveBeenCalledWith('/statements/s1/include', { scope: 'all' });
 });
 
+test('clicking a bulk-import button shows a loading state until the request finishes', async () => {
+  let resolvePatch;
+  api.patch.mockReturnValue(new Promise((resolve) => { resolvePatch = resolve; }));
+  renderPage();
+  await waitForLoaded();
+  await userEvent.click(screen.getByRole('button', { name: 'Income only' }));
+
+  expect(await screen.findByRole('button', { name: 'Applying…' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Import everything' })).toBeDisabled();
+  expect(screen.getByRole('button', { name: 'Expenses only' })).toBeDisabled();
+
+  resolvePatch(statement);
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Income only' })).not.toBeDisabled());
+});
+
 test('the approve button is disabled once nothing is left included', async () => {
   api.get.mockImplementation((path) => {
     if (path === '/accounts') return Promise.resolve([account]);

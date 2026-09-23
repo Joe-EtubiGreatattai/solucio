@@ -39,6 +39,7 @@ export default function BankStatements() {
   const [loading, setLoading] = useState(true);
   const [showImport, setShowImport] = useState(false);
   const [reviewOnly, setReviewOnly] = useState(false);
+  const [bulkIncludeScope, setBulkIncludeScope] = useState('');
 
   const load = useCallback(async () => {
     try {
@@ -123,6 +124,7 @@ export default function BankStatements() {
   // Bring in only the income rows, only the expenses, or everything — one click instead of one row at a time.
   const bulkInclude = async (scope) => {
     if (!statement) return;
+    setBulkIncludeScope(scope);
     try {
       const updated = await api.patch(`/statements/${statement._id}/include`, { scope });
       setStatements((current) => current.map((entry) => entry._id === updated._id ? updated : entry));
@@ -130,6 +132,8 @@ export default function BankStatements() {
       setError('');
     } catch (err) {
       setError(err.message);
+    } finally {
+      setBulkIncludeScope('');
     }
   };
 
@@ -204,9 +208,9 @@ export default function BankStatements() {
                 <div className="card statement-bulk-include">
                   <span>Import:</span>
                   <div className="row">
-                    <button type="button" className="secondary compact" onClick={() => bulkInclude('all')}>Import everything</button>
-                    <button type="button" className="secondary compact" onClick={() => bulkInclude('income')}>Income only</button>
-                    <button type="button" className="secondary compact" onClick={() => bulkInclude('expense')}>Expenses only</button>
+                    <button type="button" className="secondary compact" disabled={!!bulkIncludeScope} onClick={() => bulkInclude('all')}>{bulkIncludeScope === 'all' ? 'Applying…' : 'Import everything'}</button>
+                    <button type="button" className="secondary compact" disabled={!!bulkIncludeScope} onClick={() => bulkInclude('income')}>{bulkIncludeScope === 'income' ? 'Applying…' : 'Income only'}</button>
+                    <button type="button" className="secondary compact" disabled={!!bulkIncludeScope} onClick={() => bulkInclude('expense')}>{bulkIncludeScope === 'expense' ? 'Applying…' : 'Expenses only'}</button>
                   </div>
                   <small>{includedTransactions.length} of {statement.transactions.length} rows will be imported when you approve.</small>
                 </div>
