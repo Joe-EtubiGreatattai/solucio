@@ -17,7 +17,7 @@ import { downloadBlob } from '../utils/download';
 import { TableSkeleton } from '../components/Skeleton';
 import { useStoredState } from '../hooks/useStoredState';
 
-const METHOD = { transfer: 'Bank transfer', pos: 'POS' };
+const METHOD = { transfer: 'Bank transfer', pos: 'POS', cash: 'Cash' };
 
 export default function Income() {
   const live = useLiveRefresh(['incomes']);
@@ -110,6 +110,7 @@ export default function Income() {
               <option value="">All</option>
               <option value="transfer">Bank transfer</option>
               <option value="pos">POS</option>
+              <option value="cash">Cash</option>
             </select>
           </Field>
           <Field label="Account">

@@ -44,6 +44,12 @@ test('rejects unknown method and inactive accounts', async () => {
   expect(res.body.fields.accountId).toBeDefined();
 });
 
+test('accepts cash as a method', async () => {
+  const res = await post(cashier.token, { method: 'cash' });
+  expect(res.status).toBe(201);
+  expect(res.body.method).toBe('cash');
+});
+
 test('20 concurrent creates get unique, gap-free receipt numbers', async () => {
   const results = await Promise.all(Array.from({ length: 20 }, () => post(cashier.token)));
   expect(results.every((r) => r.status === 201)).toBe(true);

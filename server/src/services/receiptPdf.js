@@ -4,7 +4,7 @@ const { formatLagosDate } = require('../utils/dates');
 const { amountInWords, formatNgn } = require('../utils/money');
 const { LOGO_PATH, COLOR } = require('./pdfBrand');
 
-const METHOD = { transfer: 'Bank transfer', pos: 'POS' };
+const METHOD = { transfer: 'Bank transfer', pos: 'POS', cash: 'Cash' };
 
 function accountLabel(a) {
   if (!a) return '';

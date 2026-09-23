@@ -5,7 +5,7 @@ const incomeSchema = new Schema(
   {
     amount: { type: Number, required: true, min: 1 },
     date: { type: Date, required: true },
-    method: { type: String, enum: ['transfer', 'pos'], required: true },
+    method: { type: String, enum: ['transfer', 'pos', 'cash'], required: true },
     account: { type: Schema.Types.ObjectId, ref: 'Account', required: true },
     receiptNumber: { type: String, required: true, unique: true },
     recordedBy: { type: Schema.Types.ObjectId, ref: 'User', required: true },

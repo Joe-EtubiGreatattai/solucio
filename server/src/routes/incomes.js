@@ -17,10 +17,10 @@ const { renderReceipt } = require('../services/receiptPdf');
 const createSchema = z.object({
   amount,
   date: recordDate,
-  method: z.enum(['transfer', 'pos'], { errorMap: () => ({ message: 'Choose transfer or POS' }) }),
+  method: z.enum(['transfer', 'pos', 'cash'], { errorMap: () => ({ message: 'Choose transfer, POS or cash' }) }),
   accountId: objectId,
 });
-const listQuery = z.object({ ...listQueryShape, method: z.enum(['transfer', 'pos']).optional() });
+const listQuery = z.object({ ...listQueryShape, method: z.enum(['transfer', 'pos', 'cash']).optional() });
 
 router.use(authenticate);
 

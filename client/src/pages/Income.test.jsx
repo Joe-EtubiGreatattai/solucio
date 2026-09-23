@@ -207,6 +207,17 @@ describe('filtering by method and account', () => {
     await userEvent.selectOptions(within(filterPanel).getByLabelText('Account'), 'a2');
     expect(incomeCalls().at(-1)).toMatchObject({ method: 'pos', accountId: 'a2' });
   });
+
+  test('cash is offered as a method, both to record and to filter by', async () => {
+    renderIncome();
+    await waitFor(() => expect(incomeCalls().length).toBeGreaterThan(0));
+    const filterPanel = screen.getByRole('group', { name: 'Income filters' });
+    await userEvent.selectOptions(within(filterPanel).getByLabelText('Method'), 'cash');
+    expect(incomeCalls().at(-1)).toMatchObject({ method: 'cash' });
+
+    const formPanel = screen.getByRole('group', { name: 'Record payment' });
+    expect(within(within(formPanel).getByLabelText('Method')).getByText('Cash')).toBeInTheDocument();
+  });
 });
 
 describe('exporting the filtered list', () => {

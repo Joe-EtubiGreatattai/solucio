@@ -3,7 +3,7 @@ import { formatDate } from '../utils/dates';
 import { formatNaira } from '../utils/money';
 import { accountLabel } from '../utils/labels';
 
-const METHOD = { transfer: 'Bank transfer', pos: 'POS' };
+const METHOD = { transfer: 'Bank transfer', pos: 'POS', cash: 'Cash' };
 
 export default function PaymentSuccess({ income, account, onViewReceipt, onDismiss, canViewReceipt = true }) {
   const [busy, setBusy] = useState(false);

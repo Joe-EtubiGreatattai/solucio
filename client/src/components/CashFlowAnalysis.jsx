@@ -5,7 +5,7 @@ import { useLiveRefresh } from '../realtime/RealtimeProvider';
 import { formatNaira } from '../utils/money';
 import { Skeleton } from './Skeleton';
 
-const METHOD_LABEL = { transfer: 'Transfer', pos: 'POS' };
+const METHOD_LABEL = { transfer: 'Transfer', pos: 'POS', cash: 'Cash' };
 
 function ChangeBadge({ percent }) {
   if (percent === null || percent === undefined) return <span className="change-badge neutral">New</span>;

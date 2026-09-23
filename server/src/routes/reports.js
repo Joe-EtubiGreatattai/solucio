@@ -44,7 +44,7 @@ const exportQuery = z
     to: isoDate.optional(),
     status: z.enum(['all', 'active', 'voided']).optional(),
     accountId: objectId.optional(),
-    method: z.enum(['transfer', 'pos']).optional(),
+    method: z.enum(['transfer', 'pos', 'cash']).optional(),
     categoryType: z.string().optional(),
     group: z.string().optional(),
     item: z.string().optional(),

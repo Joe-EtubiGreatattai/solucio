@@ -7,7 +7,7 @@ const { formatLagosDate } = require('../utils/dates');
 const dmy = (s) => s.split('-').reverse().join('/');
 const subtitleFor = (from, to) => (from && to ? `${dmy(from)} to ${dmy(to)}` : from ? `From ${dmy(from)}` : to ? `Up to ${dmy(to)}` : 'All dates');
 
-const METHOD = { transfer: 'Bank transfer', pos: 'POS' };
+const METHOD = { transfer: 'Bank transfer', pos: 'POS', cash: 'Cash' };
 const populate = [['account', 'name type bankName accountNumber'], ['recordedBy', 'name']];
 const withPopulate = (q) => populate.reduce((acc, [p, s]) => acc.populate(p, s), q);
 
@@ -34,7 +34,7 @@ async function incomeTable(from, to, filters = {}) {
       { header: 'Recorded by', key: 'recordedBy', width: 18 },
     ],
     rows: items.map((i) => ({
-      date: formatLagosDate(i.date), receiptNumber: i.receiptNumber, method: METHOD[i.method], account: accountLabel(i.account),
+      date: formatLagosDate(i.date), receiptNumber: i.receiptNumber, method: METHOD[i.method] || i.method, account: accountLabel(i.account),
       amount: i.amount, status: statusOf(i), recordedBy: i.recordedBy ? i.recordedBy.name : '', voided: i.voided,
     })),
     totals: { label: 'Total (excluding void)', amount: sumActive(items) },

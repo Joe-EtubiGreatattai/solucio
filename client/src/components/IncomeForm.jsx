@@ -53,6 +53,7 @@ export default function IncomeForm({ accounts, onSubmit }) {
         <select value={method} onChange={(e) => setMethod(e.target.value)}>
           <option value="transfer">Bank transfer</option>
           <option value="pos">POS</option>
+          <option value="cash">Cash</option>
         </select>
       </Field>
       <Field label="Account" error={errors.accountId}>
