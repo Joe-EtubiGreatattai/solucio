@@ -71,6 +71,24 @@ test('list filters by date and status, keeps voided rows, populates account', as
   expect(voided.body.items.map((i) => i.voided)).toEqual([true]);
 });
 
+test('list filters by account and method', async () => {
+  const other = await makeAccount({ name: 'Second Account' });
+  await post(cashier.token, { method: 'transfer' });
+  await post(cashier.token, { method: 'pos' });
+  await post(cashier.token, { accountId: other.id, method: 'pos' });
+
+  const byMethod = await request(app).get('/api/incomes?method=pos').set(auth(cashier.token));
+  expect(byMethod.body.total).toBe(2);
+  expect(byMethod.body.items.every((i) => i.method === 'pos')).toBe(true);
+
+  const byAccount = await request(app).get(`/api/incomes?accountId=${other.id}`).set(auth(cashier.token));
+  expect(byAccount.body.total).toBe(1);
+  expect(byAccount.body.items[0].account.name).toBe('Second Account');
+
+  const both = await request(app).get(`/api/incomes?accountId=${other.id}&method=transfer`).set(auth(cashier.token));
+  expect(both.body.total).toBe(0);
+});
+
 test('void needs a reason, works once, and is audited', async () => {
   const created = await post(cashier.token);
   const url = `/api/incomes/${created.body._id}/void`;

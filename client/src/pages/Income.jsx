@@ -25,7 +25,7 @@ export default function Income() {
   const canRecord = can('income.record');
   const canVoid = can('income.void');
   const { accounts, error: accountsError } = useAccounts();
-  const [filters, setFilters] = useStoredState('solucio:income-filters', { from: '', to: '', status: 'all' });
+  const [filters, setFilters] = useStoredState('solucio:income-filters', { from: '', to: '', status: 'all', method: '', accountId: '' });
   const [data, setData] = useState({ items: [], total: 0 });
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState('');
@@ -53,7 +53,7 @@ export default function Income() {
     load();
   };
   const setFilter = (k) => (e) => setFilters({ ...filters, [k]: e.target.value });
-  const filtered = !!(filters.from || filters.to || filters.status !== 'all');
+  const filtered = !!(filters.from || filters.to || filters.status !== 'all' || filters.method || filters.accountId);
 
   return (
     <>
@@ -64,7 +64,9 @@ export default function Income() {
       {canRecord && (
         <details className="workspace-disclosure" open={!canView}>
           <summary>Record payment</summary>
-          <IncomeForm accounts={accounts} onSubmit={record} />
+          <div role="group" aria-label="Record payment">
+            <IncomeForm accounts={accounts} onSubmit={record} />
+          </div>
         </details>
       )}
       {notice && (
@@ -80,12 +82,25 @@ export default function Income() {
         <>
         <details className="workspace-disclosure workspace-disclosure-compact">
           <summary>Filter income{filtered && ' (active)'}</summary>
-          <div className="card grid">
+          <div className="card grid" role="group" aria-label="Income filters">
           <Field label="From"><input type="date" value={filters.from} onChange={setFilter('from')} /></Field>
           <Field label="To"><input type="date" value={filters.to} onChange={setFilter('to')} /></Field>
           <Field label="Status">
             <select value={filters.status} onChange={setFilter('status')}>
               <option value="all">All</option><option value="active">Active</option><option value="voided">Void</option>
+            </select>
+          </Field>
+          <Field label="Method">
+            <select value={filters.method} onChange={setFilter('method')}>
+              <option value="">All</option>
+              <option value="transfer">Bank transfer</option>
+              <option value="pos">POS</option>
+            </select>
+          </Field>
+          <Field label="Account">
+            <select value={filters.accountId} onChange={setFilter('accountId')}>
+              <option value="">All</option>
+              {accounts.map((a) => <option key={a._id} value={a._id}>{accountLabel(a)}</option>)}
             </select>
           </Field>
           </div>

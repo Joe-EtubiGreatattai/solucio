@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { AuthContext } from '../auth/AuthContext';
@@ -39,7 +39,7 @@ test('recording a payment shows a success confirmation and does not open the rec
   const open = vi.spyOn(window, 'open').mockReturnValue(null);
   renderIncome();
   await userEvent.type(screen.getByLabelText('Amount (₦)'), '1,500.50');
-  await userEvent.selectOptions(await screen.findByLabelText('Account'), 'a1');
+  await userEvent.selectOptions(await within(screen.getByRole('group', { name: 'Record payment' })).findByLabelText('Account'), 'a1');
   await userEvent.click(screen.getByRole('button', { name: 'Record payment' }));
 
   expect(await screen.findByRole('status')).toHaveTextContent('Payment recorded');
@@ -78,7 +78,7 @@ test('row actions say which entry they act on', async () => {
 test('the confirmation can be dismissed', async () => {
   renderIncome();
   await userEvent.type(screen.getByLabelText('Amount (₦)'), '100');
-  await userEvent.selectOptions(await screen.findByLabelText('Account'), 'a1');
+  await userEvent.selectOptions(await within(screen.getByRole('group', { name: 'Record payment' })).findByLabelText('Account'), 'a1');
   await userEvent.click(screen.getByRole('button', { name: 'Record payment' }));
   await userEvent.click(await screen.findByRole('button', { name: 'Record another payment' }));
   expect(screen.queryByRole('status')).toBeNull();
@@ -107,7 +107,7 @@ describe('what a role is allowed to do on this page', () => {
   test('record only: can record, never asks for the list, and gets no receipt button', async () => {
     renderIncome(['income.record']);
     await userEvent.type(screen.getByLabelText('Amount (₦)'), '100');
-    await userEvent.selectOptions(await screen.findByLabelText('Account'), 'a1');
+    await userEvent.selectOptions(await within(screen.getByRole('group', { name: 'Record payment' })).findByLabelText('Account'), 'a1');
     await userEvent.click(screen.getByRole('button', { name: 'Record payment' }));
     expect(await screen.findByRole('status')).toHaveTextContent('Payment recorded');
     expect(screen.queryByRole('button', { name: 'View receipt' })).toBeNull();
@@ -140,7 +140,7 @@ describe('the receipt PDF switch (features.receipts)', () => {
     features.receipts = false;
     renderIncome();
     await userEvent.type(screen.getByLabelText('Amount (₦)'), '100');
-    await userEvent.selectOptions(await screen.findByLabelText('Account'), 'a1');
+    await userEvent.selectOptions(await within(screen.getByRole('group', { name: 'Record payment' })).findByLabelText('Account'), 'a1');
     await userEvent.click(screen.getByRole('button', { name: 'Record payment' }));
     expect(await screen.findByRole('status')).toHaveTextContent('Payment recorded');
     expect(screen.getByRole('status')).toHaveTextContent('RCP-2026-0007');
@@ -179,5 +179,32 @@ describe('live updates', () => {
     await waitFor(() => expect(calls('/accounts')).toBe(1));
     act(() => socket.fire('data:changed', { resource: 'accounts', action: 'create', id: 'x' }));
     await waitFor(() => expect(calls('/accounts')).toBe(2));
+  });
+});
+
+describe('filtering by method and account', () => {
+  const twoAccounts = [{ _id: 'a1', name: 'Main Operations', type: 'cash' }, { _id: 'a2', name: 'Bank Account', type: 'bank', bankName: 'GTB', accountNumber: '0123456789' }];
+  const incomeCalls = () => api.get.mock.calls.filter((c) => c[0] === '/incomes').map((c) => c[1]);
+
+  beforeEach(() => {
+    api.get.mockImplementation((path) => Promise.resolve(path === '/accounts' ? twoAccounts : { items: [], total: 0 }));
+  });
+
+  test('the account filter lists every account', async () => {
+    renderIncome();
+    await waitFor(() => expect(incomeCalls().length).toBeGreaterThan(0));
+    const filterPanel = screen.getByRole('group', { name: 'Income filters' });
+    expect(within(within(filterPanel).getByLabelText('Account')).getByText('Main Operations')).toBeInTheDocument();
+    expect(within(within(filterPanel).getByLabelText('Account')).getByText('Bank Account - GTB ****6789')).toBeInTheDocument();
+  });
+
+  test('choosing a method or account asks the server to filter by it', async () => {
+    renderIncome();
+    await waitFor(() => expect(incomeCalls().length).toBeGreaterThan(0));
+    const filterPanel = screen.getByRole('group', { name: 'Income filters' });
+    await userEvent.selectOptions(within(filterPanel).getByLabelText('Method'), 'pos');
+    expect(incomeCalls().at(-1)).toMatchObject({ method: 'pos' });
+    await userEvent.selectOptions(within(filterPanel).getByLabelText('Account'), 'a2');
+    expect(incomeCalls().at(-1)).toMatchObject({ method: 'pos', accountId: 'a2' });
   });
 });
