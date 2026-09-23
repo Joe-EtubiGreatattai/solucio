@@ -3,6 +3,7 @@ import { api } from '../api';
 import { useLiveRefresh } from '../realtime/RealtimeProvider';
 import { useAuth } from '../auth/AuthContext';
 import { useAccounts } from '../hooks/useAccounts';
+import Field from '../components/Field';
 import { formatDate } from '../utils/dates';
 import { formatNaira } from '../utils/money';
 import { Skeleton, TableSkeleton } from '../components/Skeleton';
@@ -164,7 +165,12 @@ export default function BankStatements() {
             <span className="statement-file-icon">↥</span>
             <div><b>Import a bank statement</b><p>Upload a text-based PDF. Unclear entries are sent to review instead of being guessed.</p></div>
           </div>
-          <label className="field"><span>Bank account</span><select value={accountId} onChange={(event) => setAccountId(event.target.value)}><option value="">Choose account</option>{bankAccounts.map((account) => <option key={account._id} value={account._id}>{account.name} · {account.bankName}</option>)}</select></label>
+          <Field label="Bank account">
+            <select value={accountId} onChange={(event) => setAccountId(event.target.value)}>
+              <option value="">Choose account</option>
+              {bankAccounts.map((account) => <option key={account._id} value={account._id}>{account.name} · {account.bankName}</option>)}
+            </select>
+          </Field>
           <label className="statement-file-input"><input type="file" accept="application/pdf" onChange={(event) => setFile(event.target.files?.[0] || null)} /><span>{file ? file.name : 'Choose PDF'}</span></label>
           <button type="submit" disabled={uploading}>{uploading ? 'Reading statement…' : 'Import for review'}</button>
         </form>
