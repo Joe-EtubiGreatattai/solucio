@@ -62,3 +62,16 @@ test('still asks for a reason', async () => {
   await userEvent.click(screen.getByRole('button', { name: 'Void entry' }));
   expect(onConfirm).toHaveBeenCalledWith('Entered twice');
 });
+
+test('shows a busy label and disables the button while confirming', async () => {
+  let resolveConfirm;
+  const onConfirm = vi.fn().mockReturnValue(new Promise((resolve) => { resolveConfirm = resolve; }));
+  render(<Harness onConfirm={onConfirm} />);
+  await userEvent.type(screen.getByLabelText('Reason'), 'Entered twice');
+  await userEvent.click(screen.getByRole('button', { name: 'Void entry' }));
+
+  const busyButton = await screen.findByRole('button', { name: 'Voiding…' });
+  expect(busyButton).toBeDisabled();
+
+  resolveConfirm();
+});

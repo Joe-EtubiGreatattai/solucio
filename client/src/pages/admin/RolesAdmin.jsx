@@ -16,6 +16,7 @@ export default function RolesAdmin() {
   const [errors, setErrors] = useState({});
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [deletingKey, setDeletingKey] = useState(null);
 
   const load = useCallback(() => {
     api.get('/roles').then(setData).catch((e) => setError(e.message));
@@ -63,6 +64,7 @@ export default function RolesAdmin() {
   };
 
   const remove = async (role) => {
+    setDeletingKey(role.key);
     try {
       await api.delete(`/roles/${role.key}`);
       setConfirmKey(null);
@@ -71,6 +73,8 @@ export default function RolesAdmin() {
     } catch (err) {
       setConfirmKey(null);
       setError(err.message);
+    } finally {
+      setDeletingKey(null);
     }
   };
 
@@ -131,8 +135,8 @@ export default function RolesAdmin() {
                     )}
                     {confirmKey === r.key && (
                       <>
-                        <button type="button" className="link danger-text" aria-label={`Confirm delete ${r.name}`} onClick={() => remove(r)}>Confirm delete</button>
-                        <button type="button" className="link" aria-label="Cancel delete" onClick={() => setConfirmKey(null)}>Cancel</button>
+                        <button type="button" className="link danger-text" aria-label={`Confirm delete ${r.name}`} disabled={deletingKey === r.key} onClick={() => remove(r)}>{deletingKey === r.key ? 'Deleting…' : 'Confirm delete'}</button>
+                        <button type="button" className="link" aria-label="Cancel delete" disabled={deletingKey === r.key} onClick={() => setConfirmKey(null)}>Cancel</button>
                       </>
                     )}
                   </td>

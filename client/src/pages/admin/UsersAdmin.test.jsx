@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, within, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import UsersAdmin from './UsersAdmin';
 import { AuthContext } from '../../auth/AuthContext';
@@ -64,6 +64,30 @@ test('you cannot change your own role or deactivate yourself', async () => {
   renderUsers();
   expect(await screen.findByLabelText('Role for Ada Admin')).toBeDisabled();
   expect(screen.getByRole('button', { name: 'Deactivate Ada Admin' })).toBeDisabled();
+});
+
+test('shows a busy label while adding a user', async () => {
+  let resolvePost;
+  api.post.mockReturnValue(new Promise((resolve) => { resolvePost = resolve; }));
+  renderUsers();
+  await userEvent.type(await screen.findByLabelText('Name'), 'Tunde Bello');
+  await userEvent.type(screen.getByLabelText('Email'), 't@x.com');
+  await userEvent.type(screen.getByLabelText('Password'), 'password123');
+  await userEvent.click(screen.getByRole('button', { name: 'Add user' }));
+  expect(await screen.findByRole('button', { name: 'Adding…' })).toBeDisabled();
+  resolvePost({});
+});
+
+test('shows a busy label on the row while toggling active status', async () => {
+  let resolvePatch;
+  api.patch.mockReturnValue(new Promise((resolve) => { resolvePatch = resolve; }));
+  renderUsers();
+  const button = await screen.findByRole('button', { name: 'Deactivate Chioma Okafor' });
+  await userEvent.click(button);
+  await waitFor(() => expect(button).toBeDisabled());
+  expect(button).toHaveTextContent('Saving…');
+  expect(screen.getByLabelText('Role for Chioma Okafor')).toBeDisabled();
+  resolvePatch({});
 });
 
 test('a delegate who is not an admin cannot hand out or touch the Admin role', async () => {

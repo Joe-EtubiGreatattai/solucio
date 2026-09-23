@@ -17,6 +17,8 @@ export default function UsersAdmin() {
   const [form, setForm] = useState(EMPTY);
   const [errors, setErrors] = useState({});
   const [error, setError] = useState('');
+  const [adding, setAdding] = useState(false);
+  const [savingUserId, setSavingUserId] = useState(null);
 
   const load = useCallback(() => {
     api.get('/users').then(setUsers).catch((e) => setError(e.message));
@@ -37,6 +39,7 @@ export default function UsersAdmin() {
   const set = (k) => (e) => setForm({ ...form, [k]: e.target.value });
   const submit = async (e) => {
     e.preventDefault();
+    setAdding(true);
     try {
       await api.post('/users', { ...form, role: roleValue });
       setForm(EMPTY);
@@ -46,9 +49,14 @@ export default function UsersAdmin() {
     } catch (err) {
       setErrors(err.fields || {});
       setError(err.message);
+    } finally {
+      setAdding(false);
     }
   };
-  const patch = (u, body) => api.patch(`/users/${u._id}`, body).then(load).catch((e) => setError(e.message));
+  const patch = (u, body) => {
+    setSavingUserId(u._id);
+    return api.patch(`/users/${u._id}`, body).then(load).catch((e) => setError(e.message)).finally(() => setSavingUserId(null));
+  };
 
   return (
     <>
@@ -63,7 +71,7 @@ export default function UsersAdmin() {
               {choices.map((r) => <option key={r.key} value={r.key}>{r.name}</option>)}
             </select>
           </Field>
-          <button>Add user</button>
+          <button disabled={adding}>{adding ? 'Adding…' : 'Add user'}</button>
         </form>
       </details>
       {error && <p className="error" role="alert">{error}</p>}
@@ -79,12 +87,12 @@ export default function UsersAdmin() {
                 <tr key={u._id}>
                   <td>{u.name}</td><td>{u.email}</td>
                   <td>
-                    <select aria-label={`Role for ${u.name}`} value={u.role} disabled={locked} onChange={(e) => patch(u, { role: e.target.value })}>
+                    <select aria-label={`Role for ${u.name}`} value={u.role} disabled={locked || savingUserId === u._id} onChange={(e) => patch(u, { role: e.target.value })}>
                       {optionsFor(u).map((r) => <option key={r.key} value={r.key}>{r.name}</option>)}
                     </select>
                   </td>
                   <td>{u.active ? 'Active' : 'Inactive'}</td>
-                  <td><button className="link" aria-label={`${u.active ? 'Deactivate' : 'Activate'} ${u.name}`} disabled={locked} onClick={() => patch(u, { active: !u.active })}>{u.active ? 'Deactivate' : 'Activate'}</button></td>
+                  <td><button className="link" aria-label={`${u.active ? 'Deactivate' : 'Activate'} ${u.name}`} disabled={locked || savingUserId === u._id} onClick={() => patch(u, { active: !u.active })}>{savingUserId === u._id ? 'Saving…' : (u.active ? 'Deactivate' : 'Activate')}</button></td>
                 </tr>
               );
             })}

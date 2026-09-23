@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, within, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import RolesAdmin from './RolesAdmin';
 import { api } from '../../api';
@@ -108,4 +108,17 @@ test('deleting asks first, then deletes; a refusal is shown', async () => {
   await userEvent.click(await screen.findByRole('button', { name: 'Delete Front Desk' }));
   await userEvent.click(screen.getByRole('button', { name: 'Confirm delete Front Desk' }));
   expect(await screen.findByRole('alert')).toHaveTextContent('2 users still have this role');
+});
+
+test('shows a busy label while deleting', async () => {
+  let resolveDelete;
+  api.delete.mockReturnValue(new Promise((resolve) => { resolveDelete = resolve; }));
+  render(<RolesAdmin />);
+  await userEvent.click(await screen.findByRole('button', { name: 'Delete Front Desk' }));
+  const confirmButton = screen.getByRole('button', { name: 'Confirm delete Front Desk' });
+  await userEvent.click(confirmButton);
+  await waitFor(() => expect(confirmButton).toBeDisabled());
+  expect(confirmButton).toHaveTextContent('Deleting…');
+  expect(screen.getByRole('button', { name: 'Cancel delete' })).toBeDisabled();
+  resolveDelete({ deleted: true });
 });

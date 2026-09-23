@@ -15,6 +15,8 @@ export default function AccountsAdmin() {
   const [showForm, setShowForm] = useState(false);
   const [errors, setErrors] = useState({});
   const [error, setError] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [togglingId, setTogglingId] = useState(null);
 
   const load = useCallback(() => {
     api.get('/accounts').then(setAccounts).catch((e) => setError(e.message));
@@ -37,6 +39,7 @@ export default function AccountsAdmin() {
     if (Object.keys(errs).length) return;
     const body = { name: form.name.trim(), openingBalance: opening };
     if (form.type === 'bank') Object.assign(body, { bankName: form.bankName.trim(), accountNumber: form.accountNumber.trim() });
+    setSaving(true);
     try {
       if (editingId) await api.patch(`/accounts/${editingId}`, body);
       else await api.post('/accounts', { ...body, type: form.type });
@@ -48,6 +51,8 @@ export default function AccountsAdmin() {
     } catch (err) {
       setErrors(err.fields || {});
       setError(err.message);
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -56,7 +61,10 @@ export default function AccountsAdmin() {
     setShowForm(true);
     setForm({ name: a.name, type: a.type, bankName: a.bankName || '', accountNumber: a.accountNumber || '', opening: koboToNaira(a.openingBalance) });
   };
-  const toggle = (a) => api.patch(`/accounts/${a._id}`, { active: !a.active }).then(load).catch((e) => setError(e.message));
+  const toggle = (a) => {
+    setTogglingId(a._id);
+    api.patch(`/accounts/${a._id}`, { active: !a.active }).then(load).catch((e) => setError(e.message)).finally(() => setTogglingId(null));
+  };
 
   return (
     <>
@@ -77,7 +85,7 @@ export default function AccountsAdmin() {
         )}
         <Field label="Opening balance (₦)" error={errors.opening || errors.openingBalance}><input inputMode="decimal" value={form.opening} onChange={set('opening')} /></Field>
         <div className="row">
-          <button>{editingId ? 'Update account' : 'Save account'}</button>
+          <button disabled={saving}>{saving ? 'Saving…' : (editingId ? 'Update account' : 'Save account')}</button>
           {editingId && <button type="button" className="secondary" onClick={() => { setEditingId(null); setForm(EMPTY); setShowForm(false); }}>Cancel</button>}
         </div>
         </form>
@@ -96,7 +104,7 @@ export default function AccountsAdmin() {
                 <td>{a.active ? 'Active' : 'Inactive'}</td>
                 <td className="row actions">
                   <button className="link" aria-label={`Edit ${a.name}`} onClick={() => edit(a)}>Edit</button>
-                  <button className="link" aria-label={`${a.active ? 'Deactivate' : 'Activate'} ${a.name}`} onClick={() => toggle(a)}>{a.active ? 'Deactivate' : 'Activate'}</button>
+                  <button className="link" aria-label={`${a.active ? 'Deactivate' : 'Activate'} ${a.name}`} disabled={togglingId === a._id} onClick={() => toggle(a)}>{togglingId === a._id ? 'Saving…' : (a.active ? 'Deactivate' : 'Activate')}</button>
                 </td>
               </tr>
             ))}

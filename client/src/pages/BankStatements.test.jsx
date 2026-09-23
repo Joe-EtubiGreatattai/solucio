@@ -112,3 +112,19 @@ test('excluded rows are visually marked and not counted toward what still needs 
   expect(screen.getByText('Ready to approve')).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Approve statement' })).not.toBeDisabled();
 });
+
+test('approving shows a loading state until the request finishes', async () => {
+  api.get.mockImplementation((path) => {
+    if (path === '/accounts') return Promise.resolve([account]);
+    if (path === '/categories') return Promise.resolve(categories);
+    if (path === '/statements') return Promise.resolve([withTransactions([{ ...expenseTx, confidence: 'high' }, incomeTx])]);
+    return Promise.resolve([]);
+  });
+  let resolvePost;
+  api.post.mockReturnValue(new Promise((resolve) => { resolvePost = resolve; }));
+  renderPage();
+  await waitForLoaded();
+  await userEvent.click(screen.getByRole('button', { name: 'Approve statement' }));
+  expect(await screen.findByRole('button', { name: 'Approving…' })).toBeDisabled();
+  resolvePost(statement);
+});

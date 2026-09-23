@@ -62,7 +62,7 @@ export default function VoidDialog({ title, onConfirm, onCancel }) {
         </Field>
         <div className="row modal-actions">
           <button type="button" className="secondary" onClick={onCancel}>Cancel</button>
-          <button className="danger" disabled={busy}>Void entry</button>
+          <button className="danger" disabled={busy}>{busy ? 'Voiding…' : 'Void entry'}</button>
         </div>
       </form>
     </div>

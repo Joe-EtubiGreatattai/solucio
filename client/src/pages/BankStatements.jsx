@@ -40,6 +40,7 @@ export default function BankStatements() {
   const [showImport, setShowImport] = useState(false);
   const [reviewOnly, setReviewOnly] = useState(false);
   const [bulkIncludeScope, setBulkIncludeScope] = useState('');
+  const [approving, setApproving] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -139,6 +140,7 @@ export default function BankStatements() {
 
   const approve = async () => {
     if (!statement) return;
+    setApproving(true);
     try {
       const updated = await api.post(`/statements/${statement._id}/approve`);
       setStatements((current) => current.map((entry) => entry._id === updated._id ? updated : entry));
@@ -146,6 +148,8 @@ export default function BankStatements() {
       setError('');
     } catch (err) {
       setError(err.message);
+    } finally {
+      setApproving(false);
     }
   };
 
@@ -200,7 +204,7 @@ export default function BankStatements() {
               <div className="card statement-summary">
                 <div><p className="statement-eyebrow">{statement.status === 'approved' ? 'APPROVED STATEMENT' : 'STATEMENT IN REVIEW'}</p><h2>{statement.fileName}</h2><p>{statement.account?.name} · uploaded by {statement.uploadedBy?.name || 'Unknown user'} · {statement.transactions.length} transactions</p></div>
                 <div className="statement-summary-actions">
-                  {statement.status === 'approved' ? <span className="approved-lock">Locked</span> : <><span className={unresolved ? 'review-count' : includedTransactions.length === 0 ? 'review-count' : 'ready-count'}>{unresolved ? `${unresolved} need review` : includedTransactions.length === 0 ? 'Nothing selected to import' : 'Ready to approve'}</span>{can('statements.approve') && <button type="button" disabled={!canApprove} onClick={approve}>Approve statement</button>}</>}
+                  {statement.status === 'approved' ? <span className="approved-lock">Locked</span> : <><span className={unresolved ? 'review-count' : includedTransactions.length === 0 ? 'review-count' : 'ready-count'}>{unresolved ? `${unresolved} need review` : includedTransactions.length === 0 ? 'Nothing selected to import' : 'Ready to approve'}</span>{can('statements.approve') && <button type="button" disabled={!canApprove || approving} onClick={approve}>{approving ? 'Approving…' : 'Approve statement'}</button>}</>}
                 </div>
               </div>
 
