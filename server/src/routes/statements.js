@@ -11,6 +11,7 @@ const asyncHandler = require('../utils/asyncHandler');
 const AppError = require('../utils/AppError');
 const { objectId } = require('../utils/schemas');
 const { extractTransactions } = require('../services/statementParser');
+const { categorizeTransactions, loadCategorizerContext, payeeOf, isBankCharge } = require('../services/statementCategorizer');
 const { logAudit } = require('../services/audit');
 const { nextReceiptNumber } = require('../services/receiptNumber');
 const { assertValidCategory } = require('../services/categories');
@@ -35,6 +36,11 @@ const lagosYear = (date) => new Date(date.getTime() + LAGOS_OFFSET_MS).getUTCFul
 router.use(authenticate);
 
 const present = (statement) => statement.toObject ? statement.toObject() : statement;
+const populated = (id) => Statement.findById(id).populate('account', 'name bankName accountNumber').populate('uploadedBy', 'name').populate('approvedBy', 'name');
+
+// A person has already decided this row, so automatic categorization must leave it alone.
+const decidedByPerson = (t) => t.categorySource === 'reviewer' || (!t.categorySource && !!t.reviewedAt);
+const suggestion = (r) => ({ type: r.type, group: r.group, item: r.item, confidence: r.confidence, reason: r.reason, categorySource: r.categorySource });
 
 router.get('/', requirePermission('statements.view'), validate(listQuery, 'query'), asyncHandler(async (req, res) => {
   const filter = req.validated.query.accountId ? { account: req.validated.query.accountId } : {};
@@ -64,7 +70,9 @@ router.post('/import', requirePermission('statements.import'), express.raw({ typ
   }
   if (result.transactions.length === 0) throw new AppError(422, 'No transaction rows were found. This statement may be scanned or use an unsupported layout.');
 
-  const statement = await Statement.create({ account: account._id, fileName, sourcePdf: req.body, uploadedBy: req.user._id, transactions: result.transactions });
+  const results = categorizeTransactions(result.transactions, { ...(await loadCategorizerContext()), ownerName: account.name });
+  const transactions = result.transactions.map((transaction, i) => ({ ...transaction, ...results[i] }));
+  const statement = await Statement.create({ account: account._id, fileName, sourcePdf: req.body, uploadedBy: req.user._id, transactions });
   await logAudit({ actor: req.user._id, action: 'statement.import', targetModel: 'Statement', targetId: statement._id, details: { fileName, account: account.name, transactions: result.transactions.length, pages: result.pageCount, checksum: crypto.createHash('sha256').update(req.body).digest('hex').slice(0, 12) } });
   res.status(201).json(present(await Statement.findById(statement._id).populate('account', 'name bankName accountNumber').populate('uploadedBy', 'name')));
 }));
@@ -75,10 +83,34 @@ router.patch('/:id/transactions/:transactionId', requirePermission('statements.r
   if (statement.status === 'approved') throw new AppError(409, 'Approved statements cannot be changed');
   const transaction = statement.transactions.id(req.params.transactionId);
   if (!transaction) throw new AppError(404, 'Transaction not found');
-  Object.assign(transaction, req.validated.body, { reviewedBy: req.user._id, reviewedAt: new Date() });
+  const body = req.validated.body;
+  Object.assign(transaction, body, { reviewedBy: req.user._id, reviewedAt: new Date() });
+  if (['type', 'group', 'item', 'direction', 'confidence'].some((key) => key in body)) {
+    transaction.categorySource = 'reviewer';
+    transaction.reason = `Chosen by ${req.user.name}`;
+  }
+
+  // Confirming a category teaches every other row to the same payee that nobody has decided yet.
+  let similarUpdated = 0;
+  const confirmed = body.confidence === 'high' && transaction.direction === 'expense' && transaction.type && transaction.group;
+  const { key } = payeeOf(transaction.narration);
+  if (confirmed && key && !isBankCharge(transaction.narration)) {
+    for (const other of statement.transactions) {
+      if (other._id.equals(transaction._id) || other.direction !== 'expense' || decidedByPerson(other) || isBankCharge(other.narration)) continue;
+      if (payeeOf(other.narration).key !== key) continue;
+      const already = other.type === transaction.type && other.group === transaction.group
+        && (other.item || null) === (transaction.item || null) && other.confidence === 'high';
+      if (already) continue;
+      Object.assign(other, {
+        type: transaction.type, group: transaction.group, item: transaction.item || null,
+        confidence: 'high', categorySource: 'similar', reason: 'Same payee as a transaction you reviewed',
+      });
+      similarUpdated += 1;
+    }
+  }
   await statement.save();
-  await logAudit({ actor: req.user._id, action: 'statement.review', targetModel: 'Statement', targetId: statement._id, details: { fileName: statement.fileName, transaction: transaction.narration, category: [transaction.type, transaction.group, transaction.item].filter(Boolean).join(' › ') } });
-  res.json(present(await Statement.findById(statement._id).populate('account', 'name bankName accountNumber').populate('uploadedBy', 'name').populate('approvedBy', 'name')));
+  await logAudit({ actor: req.user._id, action: 'statement.review', targetModel: 'Statement', targetId: statement._id, details: { fileName: statement.fileName, transaction: transaction.narration, category: [transaction.type, transaction.group, transaction.item].filter(Boolean).join(' › '), similarUpdated } });
+  res.json({ ...present(await populated(statement._id)), similarUpdated });
 }));
 
 // One click to keep only the income rows, only the expense rows, or bring everything back.
@@ -95,6 +127,31 @@ router.patch('/:id/include', requirePermission('statements.review'), validate(in
   await statement.save();
   await logAudit({ actor: req.user._id, action: 'statement.bulk-include', targetModel: 'Statement', targetId: statement._id, details: { fileName: statement.fileName, scope, changed } });
   res.json(present(await Statement.findById(statement._id).populate('account', 'name bankName accountNumber').populate('uploadedBy', 'name').populate('approvedBy', 'name')));
+}));
+
+// Re-run categorization on rows nobody has decided yet, using the current category tree and everything
+// reviewers have taught it since the statement was imported.
+router.post('/:id/recategorize', requirePermission('statements.review'), asyncHandler(async (req, res) => {
+  const statement = await Statement.findById(req.params.id);
+  if (!statement) throw new AppError(404, 'Statement not found');
+  if (statement.status === 'approved') throw new AppError(409, 'Approved statements cannot be changed');
+  const account = await Account.findById(statement.account).lean();
+  const targets = statement.transactions.filter((transaction) => !decidedByPerson(transaction));
+  const results = categorizeTransactions(targets, { ...(await loadCategorizerContext()), ownerName: account?.name });
+
+  let changed = 0;
+  targets.forEach((transaction, i) => {
+    const next = suggestion(results[i]);
+    if (results[i].included === false) next.included = false;
+    const differs = ['type', 'group', 'item', 'confidence'].some((key) => (transaction[key] || null) !== (next[key] || null)) || (next.included === false && transaction.included !== false);
+    if (differs) changed += 1;
+    Object.assign(transaction, next);
+  });
+  await statement.save();
+  const needReview = statement.transactions.filter((transaction) => transaction.included !== false && transaction.confidence === 'needs-review').length;
+  const recategorized = { checked: targets.length, changed, needReview };
+  await logAudit({ actor: req.user._id, action: 'statement.recategorize', targetModel: 'Statement', targetId: statement._id, details: { fileName: statement.fileName, ...recategorized } });
+  res.json({ ...present(await populated(statement._id)), recategorized });
 }));
 
 router.post('/:id/approve', requirePermission('statements.approve'), asyncHandler(async (req, res) => {

@@ -196,3 +196,62 @@ describe('choosing which rows to import', () => {
     expect(res.status).toBe(409);
   });
 });
+
+describe('smarter categorization', () => {
+  const payTo = (name, overrides = {}) => expenseRow({ narration: `MOBILE TRF TO PAY/ /${name}`, type: undefined, group: undefined, item: null, confidence: 'needs-review', ...overrides });
+  const patch = (statement, id, body) => request(app).patch(`/api/statements/${statement.id}/transactions/${id}`).set(auth(accountant.token)).send(body);
+
+  test('marking a row reviewed teaches every unreviewed row to the same payee in the statement', async () => {
+    const statement = await makeStatement([
+      payTo('ZAINAB LADIDI SHAIBU', { type: 'Recurrent', group: 'Staff Wages' }),
+      payTo('ZAINAB LADIDI SHAIBU'),
+      expenseRow({ narration: 'MOBILE TRF TO GTB/ ZAINAB LADIDI SHAIBU', type: undefined, group: undefined, item: null, confidence: 'needs-review' }),
+      payTo('SOMEONE ELSE'),
+      expenseRow({ narration: 'COMMISSION MOBILE TRF TO PAY/ /ZAINAB LADIDI SHAIBU', type: 'Recurrent', group: 'Tax and Dues', item: 'Others', confidence: 'high' }),
+      payTo('ZAINAB LADIDI SHAIBU', { type: 'Recurrent', group: 'Charity', confidence: 'high', categorySource: 'reviewer' }),
+    ]);
+    const res = await patch(statement, statement.transactions[0]._id, { confidence: 'high' });
+    expect(res.status).toBe(200);
+    expect(res.body.similarUpdated).toBe(2);
+    const [chosen, same, otherBank, someoneElse, charge, decidedBefore] = res.body.transactions;
+    expect(chosen).toMatchObject({ categorySource: 'reviewer', group: 'Staff Wages' });
+    for (const row of [same, otherBank]) expect(row).toMatchObject({ group: 'Staff Wages', confidence: 'high', categorySource: 'similar', reason: expect.stringMatching(/same payee/i) });
+    expect(someoneElse.confidence).toBe('needs-review');
+    expect(charge.group).toBe('Tax and Dues'); // the bank's fee on a transfer to Zainab is not Zainab
+    expect(decidedBefore.group).toBe('Charity'); // another reviewer's choice is never overwritten
+  });
+
+  test('editing a category without confirming it does not spread to other rows', async () => {
+    const statement = await makeStatement([payTo('ADA OKON'), payTo('ADA OKON')]);
+    const res = await patch(statement, statement.transactions[0]._id, { type: 'Recurrent', group: 'Staff Wages', item: null, confidence: 'needs-review' });
+    expect(res.body.similarUpdated).toBe(0);
+    expect(res.body.transactions[1].group).toBeFalsy();
+  });
+
+  test('re-checking a statement recategorizes unreviewed rows and learns from other statements', async () => {
+    await Statement.create({
+      account: account._id, fileName: 'june.pdf', uploadedBy: admin.user._id, status: 'review',
+      transactions: [payTo('ADA OKON', { type: 'Recurrent', group: 'Staff Wages', confidence: 'high', categorySource: 'reviewer' })],
+    });
+    const statement = await makeStatement([
+      payTo('ADA OKON'),
+      expenseRow({ narration: 'MOBILE BILLS PYMT/ AIRTEL DATA/0911', type: undefined, group: undefined, item: null, confidence: 'needs-review' }),
+      payTo('KEPT AS IS', { type: 'Recurrent', group: 'Charity', confidence: 'high', categorySource: 'reviewer' }),
+    ]);
+    const res = await request(app).post(`/api/statements/${statement.id}/recategorize`).set(auth(accountant.token));
+    expect(res.status).toBe(200);
+    const [ada, airtel, kept] = res.body.transactions;
+    expect(ada).toMatchObject({ group: 'Staff Wages', categorySource: 'memory', confidence: 'high' });
+    expect(airtel).toMatchObject({ group: 'Servicing & Maintenance', item: 'Data & Airtime', categorySource: 'rule', reason: expect.stringMatching(/AIRTEL/) });
+    expect(kept).toMatchObject({ group: 'Charity', categorySource: 'reviewer' });
+    expect(res.body.recategorized).toMatchObject({ checked: 2, changed: 2, needReview: 0 });
+    expect(await AuditLog.findOne({ action: 'statement.recategorize' })).toBeTruthy();
+  });
+
+  test('approved statements cannot be re-checked', async () => {
+    const statement = await makeStatement([expenseRow()]);
+    await request(app).post(`/api/statements/${statement.id}/approve`).set(auth(admin.token));
+    const res = await request(app).post(`/api/statements/${statement.id}/recategorize`).set(auth(accountant.token));
+    expect(res.status).toBe(409);
+  });
+});

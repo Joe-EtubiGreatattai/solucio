@@ -62,3 +62,4 @@ body{font-size:15px}.side-nav a{font-size:13px}.workspace-head span{font-size:12
 .statement-table tr.excluded td{color:var(--muted);opacity:.62}.statement-table tr.excluded td b{color:var(--muted)}.statement-table td input[type="checkbox"]{width:auto;min-height:auto}
 .statement-bulk-include{display:flex;flex-wrap:wrap;align-items:center;gap:11px;margin:0 0 12px;padding:11px 14px}.statement-bulk-include>span{color:var(--muted);font-size:11px;font-weight:800}.statement-bulk-include small{margin-left:auto;color:var(--muted);font-size:10px}
 @media(max-width:620px){.statement-bulk-include{flex-direction:column;align-items:stretch}.statement-bulk-include small{margin-left:0}}
+.transaction-reason{margin-top:8px!important;padding:7px 9px;border-radius:8px;color:var(--soft-ink)!important;background:var(--blue-soft);font-size:11px;line-height:1.4}

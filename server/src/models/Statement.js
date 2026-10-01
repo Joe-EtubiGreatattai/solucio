@@ -12,6 +12,10 @@ const transactionSchema = new Schema(
     group: { type: String, trim: true },
     item: { type: String, trim: true, default: null },
     confidence: { type: String, enum: ['high', 'medium', 'needs-review'], default: 'needs-review' },
+    // Why the category was suggested, in plain words, and where the suggestion came from. A reviewer's
+    // own choice ('reviewer') is never overwritten by re-running categorization.
+    reason: { type: String, trim: true },
+    categorySource: { type: String, enum: ['rule', 'memory', 'reviewer', 'similar'] },
     reviewedBy: { type: Schema.Types.ObjectId, ref: 'User' },
     reviewedAt: Date,
     // Whether this row is brought into the books when the statement is approved. Lets someone

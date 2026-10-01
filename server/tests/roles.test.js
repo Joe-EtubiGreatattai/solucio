@@ -34,6 +34,7 @@ const ROUTES = [
   ['post', `/api/statements/import?accountId=${ID}&fileName=x.pdf`, FIN],
   ['patch', `/api/statements/${ID}/transactions/${ID}`, FIN],
   ['patch', `/api/statements/${ID}/include`, FIN],
+  ['post', `/api/statements/${ID}/recategorize`, FIN],
   ['post', `/api/statements/${ID}/approve`, ADMIN],
   ['get', '/api/audit-logs', ADMIN],
   ['get', '/api/categories/all', ADMIN],

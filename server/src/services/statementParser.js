@@ -6,23 +6,6 @@ const MONTHS = { JAN: 0, FEB: 1, MAR: 2, APR: 3, MAY: 4, JUN: 5, JUL: 6, AUG: 7,
 const MONEY = /(?:NGN|₦)?\s*(\d{1,3}(?:,\d{3})*\.\d{2}|\d+\.\d{2})/g;
 const VALUE_DATE = /^(?:\d{1,2}[/-]\d{1,2}[/-]\d{2,4}|\d{1,2}-[A-Z]{3}-(?:\d{2}(?=[A-Z\s]|$)|\d{4}\b))/i;
 
-const ruleFor = (narration, direction) => {
-  const text = narration.toLowerCase();
-  if (direction === 'income') {
-    if (/pos|paystack|flutterwave|payment|settlement|hmo|inward|credit|tfr from/.test(text)) return { confidence: 'high', type: 'Income', group: 'Patient payments', item: null };
-    return { confidence: 'needs-review' };
-  }
-  if (/salary|payroll|wages/.test(text)) return { confidence: 'high', type: 'Recurrent', group: 'Staff Wages', item: null };
-  if (/electric|ibedc|ikedc|ekedc|aedc|power/.test(text)) return { confidence: 'high', type: 'Recurrent', group: 'Servicing & Maintenance', item: 'Electricity' };
-  if (/airtel|mtn|glo|9mobile|data|airtime/.test(text)) return { confidence: 'high', type: 'Recurrent', group: 'Servicing & Maintenance', item: 'Data & Airtime' };
-  if (/fuel|diesel/.test(text)) return { confidence: 'high', type: 'Recurrent', group: 'Servicing & Maintenance', item: 'Fuel' };
-  if (/drug|pharm/.test(text)) return { confidence: 'high', type: 'Recurrent', group: 'Hospital Consumables', item: 'Drugs' };
-  if (/oxygen/.test(text)) return { confidence: 'high', type: 'Recurrent', group: 'Hospital Consumables', item: 'Oxygen' };
-  if (/rent/.test(text)) return { confidence: 'high', type: 'Recurrent', group: 'Rents', item: null };
-  if (/commission|vat|charge|fee|stamp duty|levy/.test(text)) return { confidence: 'medium', type: 'Recurrent', group: 'Tax and Dues', item: 'Others' };
-  return { confidence: 'needs-review' };
-};
-
 const amountToKobo = (value) => Math.round(Number(value.replace(/,/g, '')) * 100);
 
 function parseDate(line) {
@@ -59,7 +42,7 @@ function parseTransaction({ date, parts }) {
   const direction = narration.endsWith('-') ? 'income' : 'expense';
   const cleanNarration = narration.replace(/-\s*$/, '').trim();
   const referenceMatch = cleanNarration.match(/\b(?:ref|rrn|ft|nip)[:\s-]*([a-z0-9-]{5,})\b/i);
-  return { date, narration: cleanNarration, reference: referenceMatch?.[1] || '', amount, direction, ...ruleFor(cleanNarration, direction) };
+  return { date, narration: cleanNarration, reference: referenceMatch?.[1] || '', amount, direction };
 }
 
 function parseStatementText(text) {

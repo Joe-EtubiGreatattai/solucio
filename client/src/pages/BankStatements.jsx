@@ -41,6 +41,7 @@ export default function BankStatements() {
   const [reviewOnly, setReviewOnly] = useState(false);
   const [bulkIncludeScope, setBulkIncludeScope] = useState('');
   const [approving, setApproving] = useState(false);
+  const [rechecking, setRechecking] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -113,7 +114,8 @@ export default function BankStatements() {
         const next = updated.transactions.find((entry) => isIncluded(entry) && entry.confidence === 'needs-review');
         setSelectedTransactionId(next?._id || '');
       }
-      setNotice('Transaction review saved.');
+      const similar = updated.similarUpdated || 0;
+      setNotice(similar ? `Transaction review saved. Also applied to ${similar} other transaction${similar === 1 ? '' : 's'} from the same payee.` : 'Transaction review saved.');
       setError('');
     } catch (err) {
       setError(err.message);
@@ -135,6 +137,23 @@ export default function BankStatements() {
       setError(err.message);
     } finally {
       setBulkIncludeScope('');
+    }
+  };
+
+  // Re-run the categorizer on rows nobody has decided, using what reviewers have taught it since import.
+  const recheck = async () => {
+    if (!statement) return;
+    setRechecking(true);
+    try {
+      const updated = await api.post(`/statements/${statement._id}/recategorize`);
+      setStatements((current) => current.map((entry) => entry._id === updated._id ? updated : entry));
+      const { checked, changed, needReview } = updated.recategorized;
+      setNotice(`Re-checked ${checked} transactions: ${changed} updated, ${needReview} still need review.`);
+      setError('');
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setRechecking(false);
     }
   };
 
@@ -193,7 +212,7 @@ export default function BankStatements() {
               {statements.map((entry) => <option key={entry._id} value={entry._id}>{entry.fileName} · {entry.account?.name} · {entry.status}</option>)}
             </select>
           </div>
-          <div className="statement-toolbar-meta">{statement ? <><span>{formatDate(statement.createdAt)}</span><span className={statement.status === 'approved' ? 'approved-lock' : 'review-count'}>{statement.status === 'approved' ? 'Approved' : `${unresolved} to review`}</span></> : <span>{statements.length} imported</span>}<button type="button" className="secondary compact" onClick={load}>Refresh</button></div>
+          <div className="statement-toolbar-meta">{statement ? <><span>{formatDate(statement.createdAt)}</span><span className={statement.status === 'approved' ? 'approved-lock' : 'review-count'}>{statement.status === 'approved' ? 'Approved' : `${unresolved} to review`}</span></> : <span>{statements.length} imported</span>}{statement?.status === 'review' && can('statements.review') && <button type="button" className="secondary compact" disabled={rechecking} onClick={recheck}>{rechecking ? 'Re-checking…' : 'Re-check categories'}</button>}<button type="button" className="secondary compact" onClick={load}>Refresh</button></div>
         </div>
           {loading ? (
             <div className="statement-loading" aria-busy="true"><Skeleton label="Loading statements…" /><Skeleton /><div className="card statement-table-card"><table><TableSkeleton columns={6} label="Loading statement transactions…" /></table></div></div>
@@ -230,7 +249,7 @@ export default function BankStatements() {
                           <td>{formatDate(entry.date)}</td>
                           <td><b>{entry.narration}</b>{entry.reference && <small>{entry.reference}</small>}</td>
                           <td>{categoryLabel(entry)}</td>
-                          <td><span className={`confidence ${entry.confidence}`}>{confidenceLabel(entry.confidence)}</span></td>
+                          <td><span className={`confidence ${entry.confidence}`} title={entry.reason || undefined}>{confidenceLabel(entry.confidence)}</span></td>
                           <td className={`num ${entry.direction}`}>{entry.direction === 'income' ? '+' : '−'}{formatNaira(entry.amount)}</td>
                           <td className="keep">
                             {statement.status === 'review' && can('statements.review') ? (
@@ -250,7 +269,7 @@ export default function BankStatements() {
                 </div>
 
                 {transaction && <aside className="card transaction-editor">
-                  <div><p className="statement-eyebrow">REVIEWING TRANSACTION {reviewIndex >= 0 ? `${reviewIndex + 1} OF ${visibleTransactions.length}` : ''}</p><h2>{transaction.narration}</h2><p>{formatDate(transaction.date)} · {transaction.direction === 'income' ? 'Money in' : 'Money out'} · {formatNaira(transaction.amount)}</p></div>
+                  <div><p className="statement-eyebrow">REVIEWING TRANSACTION {reviewIndex >= 0 ? `${reviewIndex + 1} OF ${visibleTransactions.length}` : ''}</p><h2>{transaction.narration}</h2><p>{formatDate(transaction.date)} · {transaction.direction === 'income' ? 'Money in' : 'Money out'} · {formatNaira(transaction.amount)}</p>{transaction.reason && <p className="transaction-reason">Why: {transaction.reason}</p>}</div>
                   {statement.status === 'review' && can('statements.review') ? <div className="transaction-controls">
                     <label className="field"><span>Treat as</span><select value={transaction.direction} onChange={(event) => saveTransaction({ direction: event.target.value, type: null, group: null, item: null, confidence: 'needs-review' })}><option value="income">Income</option><option value="expense">Expense</option></select></label>
                     {transaction.direction === 'expense' && <>

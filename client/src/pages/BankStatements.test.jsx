@@ -128,3 +128,37 @@ test('approving shows a loading state until the request finishes', async () => {
   expect(await screen.findByRole('button', { name: 'Approving…' })).toBeDisabled();
   resolvePost(statement);
 });
+
+describe('smarter categorization', () => {
+  test('the review panel explains why a category was suggested', async () => {
+    api.get.mockImplementation((path) => {
+      if (path === '/accounts') return Promise.resolve([account]);
+      if (path === '/categories') return Promise.resolve(categories);
+      if (path === '/statements') return Promise.resolve([withTransactions([{ ...expenseTx, reason: 'Mentions IBEDC' }, incomeTx])]);
+      return Promise.resolve([]);
+    });
+    renderPage();
+    await waitForLoaded();
+    expect(screen.getByText(/Why: Mentions IBEDC/)).toBeInTheDocument();
+  });
+
+  test('confirming a row says when similar rows from the same payee were updated too', async () => {
+    api.patch.mockResolvedValue({ ...statement, similarUpdated: 3 });
+    renderPage();
+    await waitForLoaded();
+    await userEvent.click(screen.getByRole('button', { name: 'Mark reviewed' }));
+    expect(await screen.findByRole('status')).toHaveTextContent('Also applied to 3 other transactions from the same payee');
+  });
+
+  test('re-checking categories shows progress, then a summary', async () => {
+    let resolvePost;
+    api.post.mockReturnValue(new Promise((resolve) => { resolvePost = resolve; }));
+    renderPage();
+    await waitForLoaded();
+    await userEvent.click(screen.getByRole('button', { name: 'Re-check categories' }));
+    expect(api.post).toHaveBeenCalledWith('/statements/s1/recategorize');
+    expect(await screen.findByRole('button', { name: 'Re-checking…' })).toBeDisabled();
+    resolvePost({ ...statement, recategorized: { checked: 40, changed: 12, needReview: 5 } });
+    expect(await screen.findByRole('status')).toHaveTextContent('Re-checked 40 transactions: 12 updated, 5 still need review.');
+  });
+});

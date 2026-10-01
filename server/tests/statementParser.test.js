@@ -9,7 +9,7 @@ MOBILE BILLS PYMT/ AIRTEL DATA/09113677105
 08-JAN-2608-JAN-26NIP TFR FROM PATIENT ACCOUNT-80,000.0083,869.26
 `);
   expect(transactions).toEqual([
-    expect.objectContaining({ narration: 'MOBILE BILLS PYMT/ AIRTEL DATA/09113677105', direction: 'expense', amount: 150000, type: 'Recurrent', group: 'Servicing & Maintenance', item: 'Data & Airtime' }),
-    expect.objectContaining({ narration: 'NIP TFR FROM PATIENT ACCOUNT', direction: 'income', amount: 8000000, type: 'Income', group: 'Patient payments' }),
+    expect.objectContaining({ narration: 'MOBILE BILLS PYMT/ AIRTEL DATA/09113677105', direction: 'expense', amount: 150000 }),
+    expect.objectContaining({ narration: 'NIP TFR FROM PATIENT ACCOUNT', direction: 'income', amount: 8000000 }),
   ]);
 });
