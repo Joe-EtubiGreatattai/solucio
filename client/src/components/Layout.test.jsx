@@ -38,3 +38,22 @@ test('Layout only renders links the person may use, and shows the role name', ()
   expect(screen.getByText(/Front Desk/)).toBeInTheDocument();
   expect(screen.getByText('page')).toBeInTheDocument();
 });
+
+test('anyone signed in can change their own password from the sidebar', async () => {
+  const { api } = await import('../api');
+  const post = vi.spyOn(api, 'post').mockResolvedValue({ ok: true });
+  const userEvent = (await import('@testing-library/user-event')).default;
+  render(
+    <AuthContext.Provider value={{ user: { name: 'Ada', role: 'cashier' }, roleName: 'Cashier', logout() {}, ...access(['income.view']) }}>
+      <MemoryRouter><Layout><p>page</p></Layout></MemoryRouter>
+    </AuthContext.Provider>
+  );
+  await userEvent.click(screen.getAllByRole('button', { name: 'Change password' })[0]);
+  await userEvent.type(screen.getByLabelText('Current password'), 'old-password');
+  await userEvent.type(screen.getByLabelText('New password'), 'brand-new-pass');
+  await userEvent.type(screen.getByLabelText('Confirm new password'), 'brand-new-pass');
+  await userEvent.click(screen.getByRole('button', { name: 'Save password' }));
+  expect(post).toHaveBeenCalledWith('/auth/password', { currentPassword: 'old-password', newPassword: 'brand-new-pass' });
+  expect(await screen.findByRole('status')).toHaveTextContent('Your password has been changed');
+  post.mockRestore();
+});

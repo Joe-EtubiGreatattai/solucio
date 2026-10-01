@@ -4,6 +4,7 @@ import { useLiveRefresh } from '../../realtime/RealtimeProvider';
 import { useAuth } from '../../auth/AuthContext';
 import Field from '../../components/Field';
 import TableWrap from '../../components/TableWrap';
+import PasswordDialog from '../../components/PasswordDialog';
 
 const ADMIN = 'admin';
 const EMPTY = { name: '', email: '', password: '', role: '' };
@@ -19,6 +20,8 @@ export default function UsersAdmin() {
   const [error, setError] = useState('');
   const [adding, setAdding] = useState(false);
   const [savingUserId, setSavingUserId] = useState(null);
+  const [resetting, setResetting] = useState(null);
+  const [notice, setNotice] = useState('');
 
   const load = useCallback(() => {
     api.get('/users').then(setUsers).catch((e) => setError(e.message));
@@ -53,6 +56,11 @@ export default function UsersAdmin() {
       setAdding(false);
     }
   };
+  const resetPassword = async ({ newPassword }) => {
+    await api.patch(`/users/${resetting._id}`, { password: newPassword });
+    setNotice(`Password reset for ${resetting.name}. Give them the new password privately; they can change it after signing in.`);
+    setResetting(null);
+  };
   const patch = (u, body) => {
     setSavingUserId(u._id);
     return api.patch(`/users/${u._id}`, body).then(load).catch((e) => setError(e.message)).finally(() => setSavingUserId(null));
@@ -75,6 +83,7 @@ export default function UsersAdmin() {
         </form>
       </details>
       {error && <p className="error" role="alert">{error}</p>}
+      {notice && <p className="statement-notice" role="status">{notice}</p>}
       <div className="card">
         <TableWrap label="Users">
         <table>
@@ -92,7 +101,10 @@ export default function UsersAdmin() {
                     </select>
                   </td>
                   <td>{u.active ? 'Active' : 'Inactive'}</td>
-                  <td><button className="link" aria-label={`${u.active ? 'Deactivate' : 'Activate'} ${u.name}`} disabled={locked || savingUserId === u._id} onClick={() => patch(u, { active: !u.active })}>{savingUserId === u._id ? 'Saving…' : (u.active ? 'Deactivate' : 'Activate')}</button></td>
+                  <td className="row actions">
+                    <button className="link" aria-label={`${u.active ? 'Deactivate' : 'Activate'} ${u.name}`} disabled={locked || savingUserId === u._id} onClick={() => patch(u, { active: !u.active })}>{savingUserId === u._id ? 'Saving…' : (u.active ? 'Deactivate' : 'Activate')}</button>
+                    {!locked && <button className="link" aria-label={`Reset password for ${u.name}`} onClick={() => { setNotice(''); setResetting(u); }}>Reset password</button>}
+                  </td>
                 </tr>
               );
             })}
@@ -100,6 +112,7 @@ export default function UsersAdmin() {
         </table>
         </TableWrap>
       </div>
+      {resetting && <PasswordDialog title={`Reset password for ${resetting.name}`} onSubmit={resetPassword} onCancel={() => setResetting(null)} />}
     </>
   );
 }

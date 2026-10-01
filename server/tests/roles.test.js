@@ -11,6 +11,7 @@ const RANGE = 'from=2026-01-01&to=2026-01-31';
 // [method, path, roles allowed past the role guard]
 const ROUTES = [
   ['get', '/api/auth/me', ALL],
+  ['post', '/api/auth/password', ALL],
   ['get', '/api/categories', ALL],
   ['get', '/api/accounts', ALL],
   ['post', '/api/accounts', ADMIN],

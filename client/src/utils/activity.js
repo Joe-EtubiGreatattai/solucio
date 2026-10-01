@@ -12,6 +12,7 @@ export const ACTIONS = [
   { value: 'statement.approve', label: 'Approved statement' },
   { value: 'user.create', label: 'Added user' },
   { value: 'user.update', label: 'Updated user' },
+  { value: 'user.password-change', label: 'Changed own password' },
   { value: 'account.create', label: 'Added account' },
   { value: 'account.update', label: 'Updated account' },
   { value: 'category.add', label: 'Added category' },
@@ -60,6 +61,7 @@ export function describeActivity(entry) {
     case 'statement.approve': return join([d.fileName, plural(d.transactions || 0, 'transaction')], ', ');
     case 'user.create': return d.name ? `${d.name} (${d.email}) as ${d.role}` : '';
     case 'user.update': return join([d.name, changeText(d.changes, d.passwordReset)], ': ');
+    case 'user.password-change': return d.name ? `${d.name} (${d.email})` : '';
     case 'account.create': return d.name ? `${d.name} (${d.type}), opening balance ${money(d.openingBalance)}` : '';
     case 'account.update': return join([d.name, changeText(d.changes)], ': ');
     case 'category.add': return d.path ? `${d.level}: ${d.path.join(' › ')}` : '';

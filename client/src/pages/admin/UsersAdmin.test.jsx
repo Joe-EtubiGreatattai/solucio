@@ -100,3 +100,15 @@ test('a delegate who is not an admin cannot hand out or touch the Admin role', a
   const options = optionNames(screen.getByLabelText('Role for Chioma Okafor'));
   expect(options).not.toContain('Admin');
 });
+
+test('an admin can reset another user\'s password, but not their own here', async () => {
+  renderUsers();
+  expect(await screen.findByRole('button', { name: 'Reset password for Chioma Okafor' })).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Reset password for Ada Admin' })).toBeNull();
+  await userEvent.click(screen.getByRole('button', { name: 'Reset password for Chioma Okafor' }));
+  await userEvent.type(screen.getByLabelText('New password'), 'temporary-pass');
+  await userEvent.type(screen.getByLabelText('Confirm new password'), 'temporary-pass');
+  await userEvent.click(screen.getByRole('button', { name: 'Save password' }));
+  expect(api.patch).toHaveBeenCalledWith('/users/u2', { password: 'temporary-pass' });
+  expect(await screen.findByRole('status')).toHaveTextContent('Password reset for Chioma Okafor');
+});

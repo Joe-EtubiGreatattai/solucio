@@ -3,6 +3,8 @@ import { useState } from 'react';
 import { useAuth } from '../auth/AuthContext';
 import { visibleNav } from '../nav';
 import CommandPalette from './CommandPalette';
+import PasswordDialog from './PasswordDialog';
+import { api } from '../api';
 
 function Icon({ name }) {
   const paths = {
@@ -14,6 +16,7 @@ function Icon({ name }) {
     activity: <><circle cx="12" cy="12" r="8" /><path d="M12 7v5l3 2" /></>,
     admin: <><circle cx="12" cy="8" r="3" /><path d="M5 21c.5-4 2.8-6 7-6s6.5 2 7 6" /></>,
     signout: <><path d="M10 5H5v14h5M14 8l4 4-4 4M8 12h10" /></>,
+    key: <><circle cx="8" cy="15" r="4" /><path d="M10.8 12.2 20 3M16 7l3 3M14 9l2 2" /></>,
   };
   return <svg className="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{paths[name]}</svg>;
 }
@@ -22,6 +25,13 @@ export default function Layout({ children }) {
   const access = useAuth();
   const { user, roleName, logout } = access;
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [changingPassword, setChangingPassword] = useState(false);
+  const [notice, setNotice] = useState('');
+  const changePassword = async (body) => {
+    await api.post('/auth/password', body);
+    setChangingPassword(false);
+    setNotice('Your password has been changed. Use the new one next time you sign in.');
+  };
   return (
     <div className={`app-shell ${sidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
       <aside className="sidebar">
@@ -42,17 +52,19 @@ export default function Layout({ children }) {
         <div className="profile">
           <span className="avatar">{user.name?.slice(0, 1).toUpperCase()}</span>
           <span className="profile-copy"><b>{user.name}</b><small>{roleName || user.role}</small></span>
+          <button className="signout" onClick={() => setChangingPassword(true)} aria-label="Change password" title="Change password"><Icon name="key" /></button>
           <button className="signout" onClick={logout} aria-label="Sign out"><Icon name="signout" /></button>
         </div>
       </aside>
       <div className="main-shell">
-        <header className="mobile-head"><div className="brand"><span className="brand-mark">S</span><span>solucio</span></div><span className="avatar">{user.name?.slice(0, 1).toUpperCase()}</span></header>
+        <header className="mobile-head"><div className="brand"><span className="brand-mark">S</span><span>solucio</span></div><div className="row"><button type="button" className="signout" onClick={() => setChangingPassword(true)} aria-label="Change password"><Icon name="key" /></button><span className="avatar">{user.name?.slice(0, 1).toUpperCase()}</span></div></header>
         <header className="workspace-head">
           <div><strong>Welcome back, {user.name?.split(' ')[0]}!</strong><span>Here is your payment workspace.</span></div>
           <CommandPalette />
           <div className="workspace-user"><span className="avatar">{user.name?.slice(0, 1).toUpperCase()}</span><span><b>{user.name}</b><small>Solucio workspace</small></span></div>
         </header>
-        <main>{children}</main>
+        <main>{notice && <p className="statement-notice" role="status">{notice} <button type="button" className="link" onClick={() => setNotice('')}>Dismiss</button></p>}{children}</main>
+        {changingPassword && <PasswordDialog title="Change your password" askCurrent onSubmit={changePassword} onCancel={() => setChangingPassword(false)} />}
         <nav className="mobile-nav" aria-label="Main navigation">
           {visibleNav(access).slice(0, 5).map((i) => <NavLink key={i.to} to={i.to} end={i.to === '/'} aria-label={`Navigate to ${i.label}`}><Icon name={i.icon} /><span>{i.label}</span></NavLink>)}
         </nav>
