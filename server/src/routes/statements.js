@@ -70,9 +70,10 @@ router.post('/import', requirePermission('statements.import'), express.raw({ typ
   }
   if (result.transactions.length === 0) throw new AppError(422, 'No transaction rows were found. This statement may be scanned or use an unsupported layout.');
 
-  const results = categorizeTransactions(result.transactions, { ...(await loadCategorizerContext()), ownerName: account.name });
+  const holderName = result.accountName || account.name;
+  const results = categorizeTransactions(result.transactions, { ...(await loadCategorizerContext()), ownerName: holderName });
   const transactions = result.transactions.map((transaction, i) => ({ ...transaction, ...results[i] }));
-  const statement = await Statement.create({ account: account._id, fileName, sourcePdf: req.body, uploadedBy: req.user._id, transactions });
+  const statement = await Statement.create({ account: account._id, fileName, holderName, sourcePdf: req.body, uploadedBy: req.user._id, transactions });
   await logAudit({ actor: req.user._id, action: 'statement.import', targetModel: 'Statement', targetId: statement._id, details: { fileName, account: account.name, transactions: result.transactions.length, pages: result.pageCount, checksum: crypto.createHash('sha256').update(req.body).digest('hex').slice(0, 12) } });
   res.status(201).json(present(await Statement.findById(statement._id).populate('account', 'name bankName accountNumber').populate('uploadedBy', 'name')));
 }));
@@ -137,7 +138,7 @@ router.post('/:id/recategorize', requirePermission('statements.review'), asyncHa
   if (statement.status === 'approved') throw new AppError(409, 'Approved statements cannot be changed');
   const account = await Account.findById(statement.account).lean();
   const targets = statement.transactions.filter((transaction) => !decidedByPerson(transaction));
-  const results = categorizeTransactions(targets, { ...(await loadCategorizerContext()), ownerName: account?.name });
+  const results = categorizeTransactions(targets, { ...(await loadCategorizerContext()), ownerName: statement.holderName || account?.name });
 
   let changed = 0;
   targets.forEach((transaction, i) => {

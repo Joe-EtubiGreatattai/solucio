@@ -45,7 +45,55 @@ function parseTransaction({ date, parts }) {
   return { date, narration: cleanNarration, reference: referenceMatch?.[1] || '', amount, direction };
 }
 
+// Zenith Bank: each row opens with the posting and value dates run together (01/01/202601/01/2026), the
+// description wraps freely (often onto lines that look like dates), and the row closes with a line ending in
+// "NGN <amount>NGN <balance>". Debit and credit share one amount column in the text, so direction comes from
+// how the running balance moved.
+const ZENITH_ROW = /^(\d{2})\/(\d{2})\/(\d{4})\d{2}\/\d{2}\/\d{4}(.*)$/;
+const ZENITH_END = /NGN\s*([\d,]+\.\d{2})\s*NGN\s*(-?[\d,]+\.\d{2})\s*$/;
+const ZENITH_HEADER = /^(?:Create Date\s*Effective Date|CLEARED ITEMS|UNCLEARED ITEMS)/i;
+const isZenith = (text) => /Create Date\s*Effective Date/i.test(text);
+
+function parseZenith(text) {
+  const lines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  const opening = text.match(/\d{2}\/\d{2}\/\d{4}NGN\s*(-?[\d,]+\.\d{2})/);
+  let balance = opening ? amountToKobo(opening[1]) : null;
+  const transactions = [];
+  let current = null;
+
+  for (const line of lines) {
+    const start = line.match(ZENITH_ROW);
+    if (start) {
+      const [, day, month, year, rest] = start;
+      current = { date: new Date(`${year}-${month}-${day}T00:00:00.000Z`), parts: [rest] };
+    } else if (!current || ZENITH_HEADER.test(line)) {
+      continue;
+    } else {
+      current.parts.push(line);
+    }
+
+    const joined = current.parts.join(' ');
+    const end = joined.match(ZENITH_END);
+    if (!end) continue;
+    const amount = amountToKobo(end[1]);
+    const next = amountToKobo(end[2]);
+    let direction;
+    if (balance !== null && balance - amount === next) direction = 'expense';
+    else if (balance !== null && balance + amount === next) direction = 'income';
+    else direction = next >= (balance ?? next) ? 'income' : 'expense';
+    balance = next;
+    const narration = joined.slice(0, end.index).replace(/\s+/g, ' ').trim();
+    if (narration && amount > 0) {
+      const referenceMatch = narration.match(/\b(?:ref|rrn|ft|nip)[:\s/-]*([a-z0-9-]{5,})\b/i);
+      transactions.push({ date: current.date, narration, reference: referenceMatch?.[1] || '', amount, direction });
+    }
+    current = null;
+  }
+  return transactions;
+}
+
 function parseStatementText(text) {
+  if (isZenith(text)) return parseZenith(text);
   const lines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
   const transactions = [];
   let current = null;
@@ -70,9 +118,15 @@ function parseStatementText(text) {
   return transactions;
 }
 
-async function extractTransactions(buffer) {
-  const parsed = await pdf(buffer);
-  return { transactions: parseStatementText(parsed.text), pageCount: parsed.numpages || 0 };
+// Zenith headers carry the account holder's name, run into the 10-digit account number.
+function accountHolderOf(text) {
+  const match = String(text).match(/Account Name[^\n]*\n\s*(.+?)\d{10}\d{2}\/\d{2}\/\d{4}NGN/);
+  return match ? match[1].trim() : '';
 }
 
-module.exports = { extractTransactions, parseStatementText };
+async function extractTransactions(buffer) {
+  const parsed = await pdf(buffer);
+  return { transactions: parseStatementText(parsed.text), pageCount: parsed.numpages || 0, accountName: accountHolderOf(parsed.text) };
+}
+
+module.exports = { extractTransactions, parseStatementText, accountHolderOf };

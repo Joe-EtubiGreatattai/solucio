@@ -21,6 +21,11 @@ describe('expense keywords', () => {
     ['JULY SALARY STAFF', 'Staff Wages', null],
     ['MOBILE TRF TO GTB/ LANDLORD RENT FOR QUARTER', 'Rents', null],
     ['FIRS WHT REMITTANCE', 'Tax and Dues', 'WHT'],
+    ['NIP CR/MOB/SUNDAY MOSES JATTO/GTB /Consul 21stDec- 8thJan', 'Outsource Services', 'Specialist Consultation'],
+    ['NIP CR/MOB/OYEDEJI ADEDAYO STEPHEN AKANNI/GTB /Consultancy', 'Outsource Services', 'Specialist Consultation'],
+    ['NIP CR/MOB/NJIOLE, EMOLE JAMES/UBA /OUTSOURCED LAB 10JAN', 'Outsource Services', 'Laboratory'],
+    ['NIP CR/MOB/FADAHUNSIOLATUNJI OLUWASEYI/GTB /3-Histopathology', 'Outsource Services', 'Laboratory'],
+    ['NIP CR/MOB/SUPREME CARE MEDICALS/FCMB /2 biopsy gun', 'Hospital Consumables', 'Theatre Consumables'],
   ])('%s', (narration, group, item) => {
     expect(one(narration)).toMatchObject({ group, item, categorySource: 'rule' });
   });
@@ -191,5 +196,66 @@ describe('reversals', () => {
     ], { tree });
     expect(d.included).not.toBe(false);
     expect(b.confidence).toBe('needs-review');
+  });
+});
+
+describe('Zenith Bank wording', () => {
+  test.each([
+    'POS Comm Settlement for 2057KO000001215 - 01-01-2026',
+    'SMS CHARGE 24DEC TO 22JAN 2026',
+    'POS: PAY WITH TRANSFER CHARGE + VAT (20/04/2026)',
+    'NIP CHARGE + VAT',
+  ])('%s is a bank charge', (narration) => {
+    expect(one(narration)).toMatchObject({ group: 'Tax and Dues', confidence: 'high', reason: 'Bank charge' });
+  });
+
+  test.each([
+    ['NIP CR/MOB/KAYODE D TOYIN/KBL /Cons 21st-8th K', 'KAYODE D TOYIN'],
+    ['NIP/FCMB/BANHAZ ENTERPRISES LIMITED/webAppMedical bill 4 Ismaila', 'BANHAZ ENTERPRISES LIMITED'],
+    ['TRF TO JOLLY-TECH GROUP NIG/Hospital Equipments', 'JOLLY TECH GROUP NIG'],
+    ['TRF FROM OMIDAU ENTERPRISES//TRF TO SOLUCIO CLINICS//Hospital bill', 'OMIDAU ENTERPRISES'],
+    ['MC Loc POS Prch-018447639081-- SAHAD STORES LIMITED SLAGOS NG-', 'SAHAD STORES LIMITED SLAGOS'],
+    ['MC Agency CashOut-1234567- OPay ANAYO JOHN OCHUBA Lokoja A KONG', 'OPAY ANAYO JOHN OCHUBA LOKOJA A KONG'],
+  ])('the payee of %s is %s', (narration, payee) => {
+    expect(payeeOf(narration).label).toBe(payee);
+  });
+
+  test('the memo after the payee does not split one payee into many', () => {
+    expect(payeeOf('TRF TO DR. ARMIYAU ABOLORE ADEWALE/11-31st March _123456').key)
+      .toBe(payeeOf('TRF TO DR. ARMIYAU ABOLORE ADEWALE/20TH - 31ST JULY_654321').key);
+  });
+
+  test('a card purchase and an agent cash-out are described plainly', () => {
+    expect(one('MC Loc POS Prch-018447639081-- SAHAD STORES LIMITED SLAGOS NG-').reason).toMatch(/^Card payment at SAHAD STORES/);
+    expect(one('MC Agency CashOut-1234567- OPay ANAYO JOHN OCHUBA Lokoja A KONG').reason).toMatch(/^Cash withdrawal/);
+  });
+
+  test('words stuck to numbers still match', () => {
+    expect(one('NIP CR/MOB/IHEONYE HENRY ONYEKWERE/UBA /2consultation and echo')).toMatchObject({ item: 'Specialist Consultation' });
+  });
+
+  describe('own account is judged by the sender, not the recipient', () => {
+    const owner = { ownerName: 'SOLUCIO CLINICS' };
+    test.each([
+      'TRF FROM OMIDAU ENTERPRISES//TRF TO SOLUCIO CLINICS//Hospital bill',
+      'NIP/FCMB/LOUNGE ONE ENTERPRISE/webTB1cMedicare SamuelSOLUCIO CLINICS',
+    ])('%s is ordinary income', (narration) => {
+      expect(one(narration, 'income', owner).reason).not.toMatch(/own account/);
+    });
+    test.each([
+      'NIP CR/MOB/SOLUCIO CLINICS LIMITED/ROLEZ/Moniepoint active',
+      'TRF FRM SOLUCIO CLINICS - NHIS COLLECTION TO SOLUCIO CLINICS',
+    ])('%s is from the clinic\'s own account', (narration) => {
+      expect(one(narration, 'income', owner)).toMatchObject({ confidence: 'needs-review', reason: expect.stringMatching(/own account/) });
+    });
+  });
+
+  test.each([
+    'ZENITH BANK STAFF MED BILL DEC 2025',
+    'ZENITHBANK STAFF MEDICAL BILL FOR AUG 26',
+    'MEDICAL BILL FOR SOLUCIO CLINICS/ FRANCIS MOSES',
+    'ETI Hospital bills FRM IBRAHIM ADINOYI ALIU',
+  ])('%s is a payment for medical bills', (narration) => {
+    expect(one(narration, 'income', { ownerName: 'SOLUCIO CLINICS' })).toMatchObject({ confidence: 'high', reason: 'Payment for medical bills' });
   });
 });

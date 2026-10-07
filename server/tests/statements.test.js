@@ -248,6 +248,15 @@ describe('smarter categorization', () => {
     expect(await AuditLog.findOne({ action: 'statement.recategorize' })).toBeTruthy();
   });
 
+  test('re-checking uses the account holder named on the statement to spot own-account transfers', async () => {
+    const statement = await Statement.create({
+      account: account._id, fileName: 'zenith.pdf', uploadedBy: admin.user._id, holderName: 'SOLUCIO CLINICS',
+      transactions: [incomeRow({ narration: 'NIP CR/MOB/SOLUCIO CLINICS LIMITED/ROLEZ/Moniepoint active', confidence: 'medium' })],
+    });
+    const res = await request(app).post(`/api/statements/${statement.id}/recategorize`).set(auth(accountant.token));
+    expect(res.body.transactions[0]).toMatchObject({ confidence: 'needs-review', reason: expect.stringMatching(/own account/) });
+  });
+
   test('approved statements cannot be re-checked', async () => {
     const statement = await makeStatement([expenseRow()]);
     await request(app).post(`/api/statements/${statement.id}/approve`).set(auth(admin.token));

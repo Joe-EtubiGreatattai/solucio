@@ -17,10 +17,10 @@ const RULES = [
   { group: 'Servicing & Maintenance', item: 'Electrical', words: ['ELECTRICIAN*', 'REWIR*', 'GENERATOR REPAIR', 'GEN REPAIR', 'INVERTER*', 'AC REPAIR', 'AIR CONDITION*'] },
   { group: 'Hospital Consumables', item: 'Drugs', words: ['PHARM*', 'DRUG*', 'MEDICINE*', 'MEDICATION*', 'EMZOR', 'FIDSON', 'MAY AND BAKER', 'MAY & BAKER', 'HEALTHPLUS', 'MEDPLUS', 'SWIPHA', 'JUHEL', 'VACCINE*', 'INJECTION*', 'INFUSION*', 'ANTIBIOTIC*'] },
   { group: 'Hospital Consumables', item: 'Laboratory Consumables', words: ['REAGENT*', 'TEST KIT*', 'TEST STRIP*', 'LAB CONSUMABLE*', 'VACUTAINER*', 'SAMPLE BOTTLE*', 'RAPID TEST*'] },
-  { group: 'Hospital Consumables', item: 'Theatre Consumables', words: ['SUTURE*', 'SURGICAL', 'CATHETER*', 'CANNULA*', 'GAUZE', 'SYRINGE*', 'GLOVE*'] },
+  { group: 'Hospital Consumables', item: 'Theatre Consumables', words: ['SUTURE*', 'SURGICAL', 'BIOPSY', 'CATHETER*', 'CANNULA*', 'GAUZE', 'SYRINGE*', 'GLOVE*'] },
   { group: 'Hospital Consumables', item: 'Toiletries & Stationeries', confidence: 'medium', words: ['STATIONER*', 'TOILETR*', 'TISSUE*', 'DETERGENT*', 'DISINFECTANT*', 'SOAP', 'TONER*', 'PRINTING', 'A4 PAPER', 'SUPERMARKET*'] },
-  { group: 'Outsource Services', item: 'Specialist Consultation', words: ['CONSULTANT*', 'SPECIALIST*', 'LOCUM', 'CONSULTATION*'] },
-  { group: 'Outsource Services', item: 'Laboratory', words: ['LANCET', 'SYNLAB', 'DIAGNOSTIC*', 'PATHOLOG*', 'LAB TEST*', 'LAB INVESTIGATION*'] },
+  { group: 'Outsource Services', item: 'Specialist Consultation', words: ['CONSULTANT*', 'CONSULTANCY', 'CONSUL', 'SPECIALIST*', 'LOCUM', 'CONSULTATION*'] },
+  { group: 'Outsource Services', item: 'Laboratory', words: ['LANCET', 'SYNLAB', 'DIAGNOSTIC*', 'PATHOLOG*', 'HISTOPATHOLOG*', 'OUTSOURCED LAB*', 'LAB TEST*', 'LAB INVESTIGATION*'] },
   { group: 'Outsource Services', item: 'Opticals', words: ['OPTICAL*', 'OPTICIAN*', 'SPECTACLE*', 'EYEGLASS*', 'LENS', 'LENSES'] },
   { group: 'Rents', words: ['RENT', 'RENTAL', 'LEASE', 'LANDLORD'] },
   { group: 'Charity', confidence: 'medium', words: ['DONATION*', 'CHARITY', 'OFFERING', 'TITHE', 'ZAKAT', 'WELFARE'] },
@@ -39,11 +39,12 @@ const RULES = [
 // Bank charges are unambiguous and must be caught before payee learning: "COMMISSION MOBILE TRF TO ADA"
 // is the bank's fee on a transfer to Ada, not another payment to Ada.
 const CHARGE_START = /^(?:COMMISSION\b|VAT\b|HANDLING CHARGE|SMS ALERT|FGN STAMP DUTY|STAMP DUTY|EMTL\b|NIP CHARGE|TRANSFER CHARGE|CHARGES?\b|ACC(?:OUN)?T MAINT|COT\b)/i;
-const CHARGE_ANY = /SMS ALERT FEE|STAMP DUTY|MAINT(?:ENANCE)? FEE|E-?STATEMENT|CARD ISSUANCE|CARD MAINT|MONEY TRANSFER LEVY|\bEMTL\b|TOKEN FEE|CHEQUE BOOK/i;
+const CHARGE_ANY = /POS COMM(?:ISSION)? SETTLEMENT|SMS CHARGE|CHARGE\s*\+\s*VAT|SMS ALERT FEE|STAMP DUTY|MAINT(?:ENANCE)? FEE|E-?STATEMENT|CARD ISSUANCE|CARD MAINT|MONEY TRANSFER LEVY|\bEMTL\b|TOKEN FEE|CHEQUE BOOK/i;
 
 const PROCESSORS = /\b(?:PAYSTACK|FLUTTERWAVE|MONIEPOINT|OPAY|PALMPAY|INTERSWITCH|REMITA|PAYONEER|RAENEST|LEMFI|SETTLEMENT|POS SETTLEMENT|TEAMAPT)\b/i;
 const HMOS = /\b(?:HMO|NHIS|NHIA|HYGEIA|AXA MANSARD|RELIANCE|LEADWAY|AVON|CLEARLINE|HEALTHCARE INTERNATIONAL|TOTAL HEALTH TRUST|PROHEALTH|REDCARE|WELLNESS HMO)\b/i;
-const INBOUND = /\b(?:TFR|TRF|TRANSFER|TRSF|NIP|USSD|MOBILEUNION|INWARD|CREDIT|DEPOSIT|CASH DEP|PAYOUT)\b/i;
+const INBOUND = /\b(?:TFR|TRF|FRM|TRANSFER|TRSF|NIP|USSD|MOBILEUNION|INWARD|INFLOW|CREDIT|DEPOSIT|CASH DEP|PAYOUT|CQ|CHQ|CHEQUE)\b/i;
+const MEDICAL_BILL = /\b(?:MED(?:ICAL)?|MEDI|HOSPITAL)\s+(?:BILLS?|EXPENSES?)\b/i;
 // NIP credits often read "SENDER NAME/what it was for".
 const SENDER_NOTE = /^[A-Z][A-Z ,.'&-]{3,}\/\s*\S/i;
 const LOAN = /\b(?:LEND|LOAN|BORROW(?:ED)?)\b/i;
@@ -54,20 +55,30 @@ const CHANNELS = [
   /^MOBILE TRF TO [A-Z0-9]+\/+\s*\/?\s*/i,
   /^MOBILE BILLS PYMT\/?\s*/i,
   /^(?:NIP|USSD)\s+(?:TFR|TRANSFER)\s+(?:FROM|TO)\s*/i,
-  /^(?:TFR|TRANSFER)\s+(?:FROM|TO)\s*/i,
+  /^(?:TFR|TRF|TRANSFER)\s+(?:FROM|FRM|TO)\s*/i,
+  /^NIP(?:\s*CR)?\/[^/]*\/\s*/i,
+  /^MC\s+(?:LOC|INTL)?\s*(?:POS|WEB)\s+PRCH[-\s\d]*/i,
+  /^MC\s+AGENCY\s+CASHOUT[-\s\d]*/i,
   /^TRSF\/+/i,
   /^WEB PYMT\s*/i,
   /^POS PYMT\s*/i,
   /^POS TRANSFER\s*-?\s*/i,
 ];
-const NOISE = (token) => /^\d+$/.test(token) || /\d{5,}/.test(token) || /^00[A-Z]{2}$/.test(token) || token === 'LANG';
+const NOISE = (token) => /^\d+$/.test(token) || /\d{5,}/.test(token) || /^00[A-Z]{2}$/.test(token) || token === 'LANG' || token === 'NG';
 
 const spaced = (text) => ` ${String(text).toUpperCase().replace(/[^A-Z0-9&]+/g, ' ').trim()} `;
 const compact = (text) => String(text).toUpperCase().replace(/[^A-Z0-9]/g, '');
 
+// A word may also start right after a number, because bank narrations often run them together ("2CONSULTATION").
+const wordPatterns = new Map();
 function hasWord(haystack, word) {
-  if (word.endsWith('*')) return haystack.includes(` ${word.slice(0, -1)}`);
-  return haystack.includes(` ${word} `) || haystack.includes(` ${word}S `) || haystack.includes(` ${word}ES `);
+  let pattern = wordPatterns.get(word);
+  if (!pattern) {
+    const escaped = word.replace('*', '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    pattern = new RegExp(word.endsWith('*') ? `[ 0-9]${escaped}` : `[ 0-9]${escaped}(?:S|ES)? `);
+    wordPatterns.set(word, pattern);
+  }
+  return pattern.test(haystack);
 }
 
 // The counterparty with bank wording, references and location noise removed. `key` ignores word order
@@ -81,7 +92,9 @@ function payeeOf(narration) {
       if (next !== rest) { rest = next.trim(); changed = true; }
     }
   }
-  const tokens = rest.toUpperCase().split(/[^A-Z0-9]+/).filter((token) => token && !NOISE(token));
+  // Whatever follows the first "/" is usually a memo ("TRF TO ADA/March allowance"), not part of the payee.
+  const party = rest.split('/').map((part) => part.trim()).find(Boolean) || '';
+  const tokens = party.toUpperCase().split(/[^A-Z0-9]+/).filter((token) => token && !NOISE(token));
   if (!tokens.length) return { label: '', key: '' };
   const label = tokens.slice(0, 8).join(' ');
   const key = [...new Set(tokens.filter((token) => token.length > 1))].sort().join(' ');
@@ -90,15 +103,16 @@ function payeeOf(narration) {
 
 const isBankCharge = (narration) => CHARGE_START.test(narration) || CHARGE_ANY.test(narration);
 
-// Is this payee the account holder themselves (a transfer between their own accounts)?
+// Is the counterparty the account holder themselves (a transfer between their own accounts)? Only the start of
+// the counterparty counts: incoming narrations often name the holder as the *recipient* ("TRF TO SOLUCIO CLINICS").
 function isOwner(narration, ownerName) {
   if (!ownerName) return false;
   const payee = payeeOf(narration);
   const ownerCompact = compact(ownerName);
-  if (ownerCompact.length >= 6 && compact(payee.label).includes(ownerCompact)) return true;
+  if (ownerCompact.length >= 6 && compact(payee.label).startsWith(ownerCompact)) return true;
   const ownerWords = ownerName.toUpperCase().split(/[^A-Z0-9]+/).filter((word) => word.length >= 3);
   if (!ownerWords.length) return false;
-  const payeeWords = new Set(payee.label.split(' '));
+  const payeeWords = new Set(payee.label.split(' ').slice(0, ownerWords.length + 1));
   const shared = ownerWords.filter((word) => payeeWords.has(word)).length;
   return shared >= Math.min(3, ownerWords.length);
 }
@@ -178,7 +192,9 @@ const blank = { type: null, group: null, item: null };
 function describeUnknown(narration, payee) {
   const upper = narration.toUpperCase();
   const who = payee.label || 'this payee';
-  if (/^POS PYMT/.test(upper)) return `Card payment at ${who}. Choose a category once and later payments here will follow.`;
+  if (/CASHOUT|CASH WITHDRAWAL|\bATM\b/.test(upper)) return `Cash withdrawal (${who}). Choose what the cash was for.`;
+  if (/^WEB PYMT|WEB PRCH/.test(upper)) return `Online payment to ${who}. Choose a category once and later payments here will follow.`;
+  if (/^POS PYMT|POS PRCH/.test(upper)) return `Card payment at ${who}. Choose a category once and later payments here will follow.`;
   if (/^WEB PYMT/.test(upper)) return `Online payment to ${who}. Choose a category once and later payments here will follow.`;
   if (/TRF|TRANSFER|TRSF/.test(upper)) return `Transfer to ${who}. Choose a category once and other payments to this payee will follow.`;
   return 'No rule matched this narration. Choose a category.';
@@ -247,6 +263,7 @@ function categorizeIncome(t, { ownerName }) {
   if (REVERSAL.test(narration)) return result('needs-review', 'Reversal of an earlier payment, not new income. Usually left out.');
   if (LOAN.test(narration)) return result('needs-review', 'Looks like a loan rather than earned income');
   if (isOwner(narration, ownerName)) return result('needs-review', 'Looks like a transfer from the account holder\'s own account, not income');
+  if (MEDICAL_BILL.test(narration)) return result('high', 'Payment for medical bills');
   if (HMOS.test(narration)) return result('high', 'HMO payment');
   if (PROCESSORS.test(narration)) return result('high', 'Card or online payment settlement');
   if (INBOUND.test(narration) || SENDER_NOTE.test(narration)) return result('medium', 'Money received by transfer');

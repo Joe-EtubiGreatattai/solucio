@@ -32,6 +32,8 @@ const statementSchema = new Schema(
   {
     account: { type: Schema.Types.ObjectId, ref: 'Account', required: true },
     fileName: { type: String, required: true, trim: true },
+    // The account holder's name as printed on the statement, used to spot transfers between their own accounts.
+    holderName: { type: String, trim: true },
     mimeType: { type: String, default: 'application/pdf' },
     sourcePdf: { type: Buffer, select: false },
     status: { type: String, enum: ['review', 'approved'], default: 'review' },
