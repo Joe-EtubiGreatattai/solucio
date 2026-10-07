@@ -138,3 +138,62 @@ describe('hiding and showing', () => {
     expect(log.details).toEqual({ path: ['Capital', 'Equipment', 'Nursing'], active: false });
   });
 });
+
+describe('removing categories, groups and items', () => {
+  const Statement = require('../src/models/Statement');
+  const remove = (token, body) => request(app).post('/api/categories/remove').set(auth(token)).send(body);
+  const names = (tree, type) => tree.find((c) => c.type === type);
+
+  test('an unused item, group and whole category can be removed', async () => {
+    await post(admin.token, 'types', { name: 'Research' });
+    await post(admin.token, 'groups', { type: 'Research', name: 'Grants' });
+    await post(admin.token, 'items', { type: 'Research', group: 'Grants', name: 'Travel' });
+
+    let res = await remove(admin.token, { type: 'Research', group: 'Grants', item: 'Travel' });
+    expect(res.status).toBe(200);
+    expect(names(res.body, 'Research').groups[0].items).toEqual([]);
+
+    res = await remove(admin.token, { type: 'Research', group: 'Grants' });
+    expect(names(res.body, 'Research').groups).toEqual([]);
+
+    res = await remove(admin.token, { type: 'Research' });
+    expect(names(res.body, 'Research')).toBeUndefined();
+    expect(names(await publicTree(admin.token), 'Research')).toBeUndefined();
+  });
+
+  test('something an expense uses is refused, with how many and what to do instead', async () => {
+    await expense(admin.token, { type: 'Recurrent', group: 'Hospital Consumables', item: 'Oxygen' });
+    for (const body of [
+      { type: 'Recurrent', group: 'Hospital Consumables', item: 'Oxygen' },
+      { type: 'Recurrent', group: 'Hospital Consumables' },
+      { type: 'Recurrent' },
+    ]) {
+      const res = await remove(admin.token, body);
+      expect(res.status).toBe(409);
+      expect(res.body.message).toMatch(/1 expense.*Hide it instead/);
+    }
+    // Something else in the same group is still removable.
+    expect((await remove(admin.token, { type: 'Recurrent', group: 'Hospital Consumables', item: 'Drugs' })).status).toBe(200);
+  });
+
+  test('something a statement still in review uses is refused', async () => {
+    await Statement.create({
+      account: account._id, fileName: 'x.pdf', uploadedBy: admin.user._id,
+      transactions: [{ date: new Date('2026-01-15'), narration: 'RENT', amount: 1000, direction: 'expense', type: 'Recurrent', group: 'Rents', item: null }],
+    });
+    const res = await remove(admin.token, { type: 'Recurrent', group: 'Rents' });
+    expect(res.status).toBe(409);
+    expect(res.body.message).toMatch(/statement/);
+  });
+
+  test('only category managers may remove, missing nodes are 404, and removals are audited', async () => {
+    const cashier = await createUser('cashier');
+    expect((await remove(cashier.token, { type: 'Capital' })).status).toBe(403);
+    expect((await remove(admin.token, { type: 'Nope' })).status).toBe(404);
+    expect((await remove(admin.token, { type: 'Capital', group: 'Nope' })).status).toBe(404);
+    expect((await remove(admin.token, { type: 'Capital', item: 'Desk' })).status).toBe(400);
+    expect((await remove(admin.token, { type: 'Capital', group: 'Structural', item: 'Furniture' })).status).toBe(200);
+    const log = await AuditLog.findOne({ action: 'category.remove' }).lean();
+    expect(log.details).toMatchObject({ level: 'item', path: ['Capital', 'Structural', 'Furniture'] });
+  });
+});

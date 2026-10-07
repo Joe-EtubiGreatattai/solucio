@@ -112,4 +112,35 @@ async function setActive({ type, group, item, active: on }) {
   return save(category);
 }
 
-module.exports = { ensureDefaultCategories, getTree, publicTree, assertValidCategory, addType, addGroup, addItem, setActive };
+// Remove a category, group or item for good, but only when nothing points at it: expenses store category
+// names, so removing one in use would leave those records (and statements awaiting approval) dangling.
+async function removeNode({ type, group, item }) {
+  const Expense = require('../models/Expense');
+  const Statement = require('../models/Statement');
+  const category = await load(type);
+  const g = group ? category.groups.find((x) => x.name === group) : null;
+  if (group && !g) throw new AppError(404, 'Group not found');
+  const i = item ? g.items.find((x) => x.name === item) : null;
+  if (item && !i) throw new AppError(404, 'Item not found');
+
+  const match = { type, ...(group && { group }), ...(item && { item }) };
+  const label = `"${item || group || type}"`;
+  const expenses = await Expense.countDocuments(match);
+  if (expenses) {
+    throw new AppError(409, `${label} is used by ${expenses} expense${expenses === 1 ? '' : 's'}. Hide it instead, so those records keep their category.`);
+  }
+  const statements = await Statement.countDocuments({ status: 'review', transactions: { $elemMatch: match } });
+  if (statements) {
+    throw new AppError(409, `${label} is used in ${statements} bank statement${statements === 1 ? '' : 's'} still in review. Change those transactions first, or hide it instead.`);
+  }
+
+  if (item) g.items.splice(g.items.indexOf(i), 1);
+  else if (group) category.groups.splice(category.groups.indexOf(g), 1);
+  else {
+    await category.deleteOne();
+    return category;
+  }
+  return save(category);
+}
+
+module.exports = { ensureDefaultCategories, getTree, publicTree, assertValidCategory, addType, addGroup, addItem, setActive, removeNode };

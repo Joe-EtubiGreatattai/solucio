@@ -9,6 +9,8 @@ export default function CategoriesAdmin() {
   const [drafts, setDrafts] = useState({});
   const [fieldError, setFieldError] = useState({});
   const [error, setError] = useState('');
+  const [confirming, setConfirming] = useState(null);
+  const [removing, setRemoving] = useState(null);
 
   useEffect(() => {
     api.get('/categories/all').then(setTree).catch((e) => setError(e.message));
@@ -33,6 +35,23 @@ export default function CategoriesAdmin() {
     return run(() => api.post(path, { ...body, name }), key);
   };
   const toggle = (body, active) => run(() => api.patch('/categories/active', { ...body, active }));
+  // Removing is permanent, so it takes a second click; the server refuses anything an expense still uses.
+  const remove = async (label, body) => {
+    setRemoving(label);
+    await run(() => api.post('/categories/remove', body));
+    setRemoving(null);
+    setConfirming(null);
+  };
+  const removeControls = (label, body) => (confirming === label ? (
+    <>
+      <button type="button" className="link danger-text" aria-label={`Confirm remove ${label}`} disabled={removing === label} onClick={() => remove(label, body)}>
+        {removing === label ? 'Removing…' : 'Confirm remove'}
+      </button>
+      <button type="button" className="link" aria-label="Cancel remove" disabled={removing === label} onClick={() => setConfirming(null)}>Cancel</button>
+    </>
+  ) : (
+    <button type="button" className="link danger-text" aria-label={`Remove ${label}`} onClick={() => { setError(''); setConfirming(label); }}>Remove</button>
+  ));
   const input = (key, label) => (
     <input aria-label={label} value={drafts[key] || ''} maxLength={60} onChange={(e) => setDraft(key, e.target.value)} />
   );
@@ -46,7 +65,7 @@ export default function CategoriesAdmin() {
     <>
       <p className="muted">
         Add the categories, groups and items your expenses need. Something you hide disappears from new expenses;
-        past expenses keep it, so nothing is ever lost.
+        past expenses keep it, so nothing is ever lost. Remove is only for things no expense uses yet, like a typo.
       </p>
       <details className="workspace-disclosure">
         <summary>Add category</summary>
@@ -66,6 +85,7 @@ export default function CategoriesAdmin() {
             <h2>{c.type}</h2>
             {!c.active && <small className="muted">Hidden</small>}
             {showHide(c, `category ${c.type}`, { type: c.type })}
+            {removeControls(`category ${c.type}`, { type: c.type })}
           </div>
           <ul className="tree">
             {c.groups.map((g) => (
@@ -74,6 +94,7 @@ export default function CategoriesAdmin() {
                   <b>{g.name}</b>
                   {!g.active && <small className="muted">Hidden</small>}
                   {showHide(g, `group ${g.name} in ${c.type}`, { type: c.type, group: g.name })}
+                  {removeControls(`group ${g.name} in ${c.type}`, { type: c.type, group: g.name })}
                 </div>
                 <ul className="items">
                   {g.items.map((i) => (
@@ -81,6 +102,7 @@ export default function CategoriesAdmin() {
                       <span>{i.name}</span>
                       {!i.active && <small className="muted">Hidden</small>}
                       {showHide(i, `item ${i.name} in ${g.name}`, { type: c.type, group: g.name, item: i.name })}
+                      {removeControls(`item ${i.name} in ${g.name}`, { type: c.type, group: g.name, item: i.name })}
                     </li>
                   ))}
                 </ul>

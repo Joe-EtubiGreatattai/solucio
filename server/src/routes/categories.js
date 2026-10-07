@@ -52,4 +52,19 @@ router.patch('/active', ...manage, validate(activeBody), asyncHandler(async (req
   res.json(await categories.getTree({ includeInactive: true }));
 }));
 
+const removeBody = z
+  .object({ type: parent, group: parent.optional(), item: parent.optional() })
+  .refine((d) => !d.item || d.group, { message: 'Choose the group the item belongs to', path: ['group'] });
+
+// Delete a category, group or item that nothing uses yet (typos, test entries). Anything in use must be hidden.
+router.post('/remove', ...manage, validate(removeBody), asyncHandler(async (req, res) => {
+  const b = req.validated.body;
+  const category = await categories.removeNode(b);
+  await logAudit({
+    actor: req.user._id, action: 'category.remove', targetModel: 'Category', targetId: category._id,
+    details: { level: b.item ? 'item' : b.group ? 'group' : 'category', path: [b.type, b.group, b.item].filter(Boolean) },
+  });
+  res.json(await categories.getTree({ includeInactive: true }));
+}));
+
 module.exports = router;

@@ -1,7 +1,7 @@
 const mongoose = require('mongoose');
 
-// Names are what expenses store, so nothing is ever renamed or deleted: an admin can only add,
-// or hide something from new expenses. Old expenses keep pointing at the same names.
+// Names are what expenses store, so nothing is ever renamed, and anything in use can only be hidden from new
+// expenses. Only a name nothing uses yet (a typo, a test entry) can be removed for good.
 const itemSchema = new mongoose.Schema({ name: { type: String, required: true, trim: true }, active: { type: Boolean, default: true } }, { _id: false });
 const groupSchema = new mongoose.Schema(
   { name: { type: String, required: true, trim: true }, active: { type: Boolean, default: true }, items: { type: [itemSchema], default: [] } },

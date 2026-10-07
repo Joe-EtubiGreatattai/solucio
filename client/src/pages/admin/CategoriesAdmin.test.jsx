@@ -108,3 +108,35 @@ test('says when it cannot load', async () => {
   render(<CategoriesAdmin />);
   expect(await screen.findByRole('alert')).toHaveTextContent('Cannot reach the server');
 });
+
+describe('removing', () => {
+  test('asks to confirm, then removes and shows the updated list', async () => {
+    let resolvePost;
+    api.post.mockReturnValue(new Promise((resolve) => { resolvePost = resolve; }));
+    render(<CategoriesAdmin />);
+    await userEvent.click(await screen.findByRole('button', { name: 'Remove item Warehouse in Rents' }));
+    expect(api.post).not.toHaveBeenCalled();
+    const confirm = screen.getByRole('button', { name: 'Confirm remove item Warehouse in Rents' });
+    await userEvent.click(confirm);
+    expect(api.post).toHaveBeenCalledWith('/categories/remove', { type: 'Recurrent', group: 'Rents', item: 'Warehouse' });
+    expect(confirm).toBeDisabled();
+    expect(confirm).toHaveTextContent('Removing…');
+    resolvePost(tree);
+  });
+
+  test('cancel backs out without removing', async () => {
+    render(<CategoriesAdmin />);
+    await userEvent.click(await screen.findByRole('button', { name: 'Remove category Capital' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel remove' }));
+    expect(screen.getByRole('button', { name: 'Remove category Capital' })).toBeInTheDocument();
+    expect(api.post).not.toHaveBeenCalled();
+  });
+
+  test('when something is in use, the server\'s reason is shown', async () => {
+    api.post.mockRejectedValue(new Error('"Staff Wages" is used by 3 expenses. Hide it instead, so those records keep their category.'));
+    render(<CategoriesAdmin />);
+    await userEvent.click(await screen.findByRole('button', { name: 'Remove group Staff Wages in Recurrent' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Confirm remove group Staff Wages in Recurrent' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('used by 3 expenses. Hide it instead');
+  });
+});
