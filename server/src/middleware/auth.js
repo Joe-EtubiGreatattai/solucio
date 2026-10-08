@@ -2,7 +2,8 @@ const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 const Role = require('../models/Role');
 const AppError = require('../utils/AppError');
-const { permissionsForRole, ADMIN_KEY, MAINTENANCE_KEY } = require('../config/permissions');
+const { ADMIN_KEY, MAINTENANCE_KEY } = require('../config/permissions');
+const { accessForUser } = require('../services/roleAccess');
 
 async function authenticate(req, res, next) {
   try {
@@ -16,14 +17,11 @@ async function authenticate(req, res, next) {
     }
     const user = await User.findById(payload.sub);
     if (!user || !user.active) throw new AppError(401, 'Account not available');
-    // Read the role fresh on every request so a change to a role applies straight away. The maintenance role
-    // lives only in code, so it has no Role document to look up.
-    const role = user.role === MAINTENANCE_KEY
-      ? { key: MAINTENANCE_KEY, name: 'Maintenance' }
-      : await Role.findOne({ key: user.role }).lean();
+    // Read the role fresh on every request so a change to a role applies straight away.
+    const { roleName, permissions } = await accessForUser(user);
     req.user = user;
-    req.roleName = role ? role.name : user.role;
-    req.permissions = new Set(permissionsForRole(role));
+    req.roleName = roleName;
+    req.permissions = new Set(permissions);
     next();
   } catch (err) {
     next(err);

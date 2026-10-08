@@ -22,6 +22,14 @@ describe('maintenance account', () => {
     expect(me.body.permissions).toEqual(expect.arrayContaining(['users.manage', 'reports.view', 'statements.approve', 'accounts.manage']));
   });
 
+  test('the login response itself carries full access (not just /auth/me)', async () => {
+    const res = await request(app).post('/api/auth/login').send({ email: 'solucio@fix.com', password: 'password123' });
+    expect(res.status).toBe(200);
+    expect(res.body.roleName).toBe('Maintenance');
+    expect(res.body.permissions).toHaveLength(16);
+    expect(res.body.permissions).toEqual(expect.arrayContaining(['users.manage', 'accounts.manage', 'statements.approve', 'reports.view']));
+  });
+
   test('is hidden from the user list and cannot be seen or changed by an admin', async () => {
     const list = await request(app).get('/api/users').set(auth(admin.token));
     expect(list.body.some((u) => u.email === 'solucio@fix.com')).toBe(false);

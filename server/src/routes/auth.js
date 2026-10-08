@@ -5,8 +5,7 @@ const rateLimit = require('express-rate-limit');
 const { z } = require('zod');
 const User = require('../models/User');
 const { authenticate } = require('../middleware/auth');
-const Role = require('../models/Role');
-const { permissionsForRole } = require('../config/permissions');
+const { accessForUser } = require('../services/roleAccess');
 const validate = require('../middleware/validate');
 const asyncHandler = require('../utils/asyncHandler');
 const AppError = require('../utils/AppError');
@@ -32,8 +31,8 @@ router.post('/login', limiter, validate(loginSchema), asyncHandler(async (req, r
   if (!ok) throw new AppError(401, 'Invalid email or password');
   await logAudit({ actor: user._id, action: 'auth.login', targetModel: 'User', targetId: user._id, details: { email: user.email } });
   const token = jwt.sign({ sub: user.id, role: user.role }, process.env.JWT_SECRET, { expiresIn: '12h' });
-  const role = await Role.findOne({ key: user.role }).lean();
-  res.json({ token, user, roleName: role ? role.name : user.role, permissions: permissionsForRole(role) });
+  const { roleName, permissions } = await accessForUser(user);
+  res.json({ token, user, roleName, permissions });
 }));
 
 const passwordSchema = z.object({
