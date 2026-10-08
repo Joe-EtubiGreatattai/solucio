@@ -1,6 +1,8 @@
 const router = require('express').Router();
 const { z } = require('zod');
 const AuditLog = require('../models/AuditLog');
+const User = require('../models/User');
+const { MAINTENANCE_KEY } = require('../config/permissions');
 const { authenticate, requirePermission } = require('../middleware/auth');
 const validate = require('../middleware/validate');
 const asyncHandler = require('../utils/asyncHandler');
@@ -27,7 +29,14 @@ router.get('/', validate(listQuery, 'query'), asyncHandler(async (req, res) => {
     if (q.to) filter.createdAt.$lt = dayAfter(parseLagosDate(q.to));
   }
   if (q.action) filter.action = q.action;
-  if (q.actorId) filter.actor = q.actorId;
+  // Keep maintenance work out of the clinic's activity view (the records still exist in the database).
+  const hiddenActors = await User.find({ role: MAINTENANCE_KEY }).distinct('_id');
+  if (q.actorId) {
+    if (hiddenActors.some((id) => id.equals(q.actorId))) return res.json({ items: [], total: 0, page: q.page, limit: q.limit });
+    filter.actor = q.actorId;
+  } else if (hiddenActors.length) {
+    filter.actor = { $nin: hiddenActors };
+  }
   const [items, total] = await Promise.all([
     AuditLog.find(filter)
       .sort({ createdAt: -1, _id: -1 })

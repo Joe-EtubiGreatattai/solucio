@@ -7,7 +7,7 @@ const validate = require('../middleware/validate');
 const asyncHandler = require('../utils/asyncHandler');
 const AppError = require('../utils/AppError');
 const { logAudit } = require('../services/audit');
-const { PERMISSIONS, PERMISSION_KEYS, ADMIN_KEY } = require('../config/permissions');
+const { PERMISSIONS, PERMISSION_KEYS, ADMIN_KEY, RESERVED_ROLE_KEYS } = require('../config/permissions');
 
 const permissions = z.array(z.enum(PERMISSION_KEYS, { errorMap: () => ({ message: 'Unknown permission' }) })).transform((list) => [...new Set(list)]);
 const name = z.string().trim().min(1, 'Give the role a name').max(40, 'Keep the name under 40 characters');
@@ -47,6 +47,7 @@ router.get('/', requirePermission('users.manage'), asyncHandler(async (req, res)
 
 router.post('/', requireAdminRole, validate(createSchema), asyncHandler(async (req, res) => {
   const b = req.validated.body;
+  if (RESERVED_ROLE_KEYS.has(slug(b.name))) throw new AppError(409, DUPLICATE, { name: DUPLICATE });
   let role;
   try {
     role = await Role.create({ key: await uniqueKey(b.name), name: b.name, description: b.description || '', permissions: b.permissions });

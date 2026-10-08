@@ -6,6 +6,7 @@ const origins = require('./config/origins');
 const { initRealtime } = require('./realtime');
 const { ensureBuiltInRoles } = require('./services/roles');
 const { ensureDefaultCategories } = require('./services/categories');
+const { ensureMaintenanceAccount } = require('./services/maintenanceAccount');
 
 if (!process.env.JWT_SECRET || !process.env.MONGODB_URI) {
   console.error('JWT_SECRET and MONGODB_URI must be set (see .env.example)');

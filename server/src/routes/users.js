@@ -3,7 +3,7 @@ const bcrypt = require('bcryptjs');
 const { z } = require('zod');
 const User = require('../models/User');
 const Role = require('../models/Role');
-const { ADMIN_KEY } = require('../config/permissions');
+const { ADMIN_KEY, MAINTENANCE_KEY } = require('../config/permissions');
 const { authenticate, requirePermission } = require('../middleware/auth');
 const validate = require('../middleware/validate');
 const asyncHandler = require('../utils/asyncHandler');
@@ -34,7 +34,7 @@ async function checkRole(req, key) {
   if (key === ADMIN_KEY && !isAdmin(req)) throw new AppError(403, 'Only an admin can make someone an admin');
 }
 
-router.get('/', asyncHandler(async (req, res) => res.json(await User.find().sort('name'))));
+router.get('/', asyncHandler(async (req, res) => res.json(await User.find({ role: { $ne: MAINTENANCE_KEY } }).sort('name'))));
 
 router.post('/', validate(createSchema), asyncHandler(async (req, res) => {
   const { password: plain, ...rest } = req.validated.body;
@@ -53,7 +53,8 @@ router.post('/', validate(createSchema), asyncHandler(async (req, res) => {
 router.patch('/:id', validate(updateSchema), asyncHandler(async (req, res) => {
   const { password: plain, ...changes } = req.validated.body;
   const target = await User.findById(req.params.id);
-  if (!target) throw new AppError(404, 'User not found');
+  // Maintenance accounts are invisible to the clinic, so treat them as if they do not exist here.
+  if (!target || target.role === MAINTENANCE_KEY) throw new AppError(404, 'User not found');
   if (target.role === ADMIN_KEY && !isAdmin(req)) throw new AppError(403, 'Only an admin can change an admin');
   if (changes.role) await checkRole(req, changes.role);
   if (req.params.id === req.user.id && ((changes.role && changes.role !== req.user.role) || changes.active === false)) {
