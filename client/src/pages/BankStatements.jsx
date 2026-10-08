@@ -42,6 +42,9 @@ export default function BankStatements() {
   const [bulkIncludeScope, setBulkIncludeScope] = useState('');
   const [approving, setApproving] = useState(false);
   const [rechecking, setRechecking] = useState(false);
+  // Holds the id of the statement awaiting a second click, so switching statements never carries it over.
+  const [confirmingDelete, setConfirmingDelete] = useState('');
+  const [deleting, setDeleting] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -157,6 +160,26 @@ export default function BankStatements() {
     }
   };
 
+  // Only statements still in review can be deleted; the server refuses approved ones.
+  const deleteStatement = async () => {
+    if (!statement) return;
+    setDeleting(true);
+    try {
+      await api.delete(`/statements/${statement._id}`);
+      const remaining = statements.filter((entry) => entry._id !== statement._id);
+      setStatements(remaining);
+      setSelectedId(remaining[0]?._id || '');
+      setSelectedTransactionId(remaining[0]?.transactions[0]?._id || '');
+      setNotice(`${statement.fileName} was deleted.`);
+      setError('');
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setDeleting(false);
+      setConfirmingDelete('');
+    }
+  };
+
   const approve = async () => {
     if (!statement) return;
     setApproving(true);
@@ -223,7 +246,7 @@ export default function BankStatements() {
               <div className="card statement-summary">
                 <div><p className="statement-eyebrow">{statement.status === 'approved' ? 'APPROVED STATEMENT' : 'STATEMENT IN REVIEW'}</p><h2>{statement.fileName}</h2><p>{statement.account?.name} · uploaded by {statement.uploadedBy?.name || 'Unknown user'} · {statement.transactions.length} transactions</p></div>
                 <div className="statement-summary-actions">
-                  {statement.status === 'approved' ? <span className="approved-lock">Locked</span> : <><span className={unresolved ? 'review-count' : includedTransactions.length === 0 ? 'review-count' : 'ready-count'}>{unresolved ? `${unresolved} need review` : includedTransactions.length === 0 ? 'Nothing selected to import' : 'Ready to approve'}</span>{can('statements.approve') && <button type="button" disabled={!canApprove || approving} onClick={approve}>{approving ? 'Approving…' : 'Approve statement'}</button>}</>}
+                  {statement.status === 'approved' ? <span className="approved-lock">Locked</span> : <><span className={unresolved ? 'review-count' : includedTransactions.length === 0 ? 'review-count' : 'ready-count'}>{unresolved ? `${unresolved} need review` : includedTransactions.length === 0 ? 'Nothing selected to import' : 'Ready to approve'}</span>{can('statements.approve') && <button type="button" disabled={!canApprove || approving} onClick={approve}>{approving ? 'Approving…' : 'Approve statement'}</button>}{can('statements.approve') && (confirmingDelete === statement._id ? <><button type="button" className="danger" disabled={deleting} onClick={deleteStatement}>{deleting ? 'Deleting…' : 'Confirm delete'}</button><button type="button" className="secondary" disabled={deleting} onClick={() => setConfirmingDelete('')}>Cancel</button></> : <button type="button" className="secondary" onClick={() => setConfirmingDelete(statement._id)}>Delete statement</button>)}</>}
                 </div>
               </div>
 

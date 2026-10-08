@@ -155,6 +155,22 @@ router.post('/:id/recategorize', requirePermission('statements.review'), asyncHa
   res.json({ ...present(await populated(statement._id)), recategorized });
 }));
 
+// Discard a statement that is still in review (a wrong file, a duplicate upload). Approved statements stay:
+// their rows are already income and expense records, which are corrected by voiding, never by deleting.
+router.delete('/:id', requirePermission('statements.approve'), asyncHandler(async (req, res) => {
+  const statement = await Statement.findById(req.params.id).populate('account', 'name');
+  if (!statement) throw new AppError(404, 'Statement not found');
+  if (statement.status === 'approved') {
+    throw new AppError(409, 'Approved statements cannot be deleted because their transactions are already in your records. Void those records instead.');
+  }
+  await statement.deleteOne();
+  await logAudit({
+    actor: req.user._id, action: 'statement.delete', targetModel: 'Statement', targetId: statement._id,
+    details: { fileName: statement.fileName, account: statement.account?.name, transactions: statement.transactions.length },
+  });
+  res.json({ deleted: true });
+}));
+
 router.post('/:id/approve', requirePermission('statements.approve'), asyncHandler(async (req, res) => {
   const statement = await Statement.findById(req.params.id);
   if (!statement) throw new AppError(404, 'Statement not found');

@@ -4,7 +4,7 @@ import BankStatements from './BankStatements';
 import { api } from '../api';
 import { renderLive } from '../test/live';
 
-vi.mock('../api', () => ({ api: { get: vi.fn(), post: vi.fn(), patch: vi.fn(), uploadPdf: vi.fn() }, API_BASE: '', getToken: () => null }));
+vi.mock('../api', () => ({ api: { get: vi.fn(), post: vi.fn(), patch: vi.fn(), delete: vi.fn(), uploadPdf: vi.fn() }, API_BASE: '', getToken: () => null }));
 
 const account = { _id: 'a1', name: 'Main Operations', type: 'bank', bankName: 'GTBank', accountNumber: '0123456789' };
 const categories = [{ type: 'Recurrent', groups: [{ name: 'Servicing & Maintenance', items: ['Electricity', 'Fuel'] }] }];
@@ -160,5 +160,49 @@ describe('smarter categorization', () => {
     expect(await screen.findByRole('button', { name: 'Re-checking…' })).toBeDisabled();
     resolvePost({ ...statement, recategorized: { checked: 40, changed: 12, needReview: 5 } });
     expect(await screen.findByRole('status')).toHaveTextContent('Re-checked 40 transactions: 12 updated, 5 still need review.');
+  });
+});
+
+describe('deleting a statement', () => {
+  test('asks to confirm, shows progress, then removes it from the list', async () => {
+    let resolveDelete;
+    api.delete.mockReturnValue(new Promise((resolve) => { resolveDelete = resolve; }));
+    renderPage();
+    await waitForLoaded();
+    await userEvent.click(screen.getByRole('button', { name: 'Delete statement' }));
+    expect(api.delete).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByRole('button', { name: 'Confirm delete' }));
+    expect(api.delete).toHaveBeenCalledWith('/statements/s1');
+    expect(screen.getByRole('button', { name: 'Deleting…' })).toBeDisabled();
+    resolveDelete({ deleted: true });
+    expect(await screen.findByRole('status')).toHaveTextContent('july.pdf was deleted.');
+    expect(screen.queryByRole('region', { name: 'Statement transactions' })).toBeNull();
+  });
+
+  test('cancel keeps the statement', async () => {
+    renderPage();
+    await waitForLoaded();
+    await userEvent.click(screen.getByRole('button', { name: 'Delete statement' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(screen.getByRole('button', { name: 'Delete statement' })).toBeInTheDocument();
+    expect(api.delete).not.toHaveBeenCalled();
+  });
+
+  test('approved statements and people who cannot approve get no delete button', async () => {
+    api.get.mockImplementation((path) => {
+      if (path === '/accounts') return Promise.resolve([account]);
+      if (path === '/categories') return Promise.resolve(categories);
+      if (path === '/statements') return Promise.resolve([{ ...statement, status: 'approved' }]);
+      return Promise.resolve([]);
+    });
+    renderPage();
+    await waitForLoaded();
+    expect(screen.queryByRole('button', { name: 'Delete statement' })).toBeNull();
+  });
+
+  test('a reviewer without approval rights gets no delete button', async () => {
+    renderPage({ can: (p) => p !== 'statements.approve' });
+    await waitForLoaded();
+    expect(screen.queryByRole('button', { name: 'Delete statement' })).toBeNull();
   });
 });

@@ -264,3 +264,32 @@ describe('smarter categorization', () => {
     expect(res.status).toBe(409);
   });
 });
+
+describe('deleting a statement', () => {
+  const del = (token, statement) => request(app).delete(`/api/statements/${statement.id}`).set(auth(token));
+
+  test('an admin can delete a statement still in review, and it is audited', async () => {
+    const statement = await makeStatement([expenseRow(), incomeRow()]);
+    const res = await del(admin.token, statement);
+    expect(res.status).toBe(200);
+    expect(await Statement.findById(statement.id)).toBeNull();
+    const log = await AuditLog.findOne({ action: 'statement.delete' }).lean();
+    expect(log.details).toMatchObject({ fileName: 'july-statement.pdf', transactions: 2 });
+  });
+
+  test('an approved statement cannot be deleted, because its rows are already records', async () => {
+    const statement = await makeStatement([expenseRow()]);
+    await request(app).post(`/api/statements/${statement.id}/approve`).set(auth(admin.token));
+    const res = await del(admin.token, statement);
+    expect(res.status).toBe(409);
+    expect(res.body.message).toMatch(/void/i);
+    expect(await Statement.findById(statement.id)).toBeTruthy();
+    expect(await Expense.countDocuments()).toBe(1);
+  });
+
+  test('only admins can delete, and an unknown statement is 404', async () => {
+    const statement = await makeStatement([expenseRow()]);
+    expect((await del(accountant.token, statement)).status).toBe(403);
+    expect((await request(app).delete('/api/statements/64b7f0000000000000000000').set(auth(admin.token))).status).toBe(404);
+  });
+});

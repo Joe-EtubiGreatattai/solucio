@@ -10,6 +10,7 @@ export const ACTIONS = [
   { value: 'statement.import', label: 'Imported statement' },
   { value: 'statement.review', label: 'Reviewed statement transaction' },
   { value: 'statement.approve', label: 'Approved statement' },
+  { value: 'statement.delete', label: 'Deleted statement' },
   { value: 'user.create', label: 'Added user' },
   { value: 'user.update', label: 'Updated user' },
   { value: 'user.password-change', label: 'Changed own password' },
@@ -59,6 +60,7 @@ export function describeActivity(entry) {
     case 'expense.void': return join([join([category(d), money(d.amount)], ', '), reason(d)], '. ');
     case 'statement.import': return join([d.fileName, d.account, plural(d.transactions || 0, 'transaction')], ', ');
     case 'statement.review': return join([d.fileName, d.category], ': ');
+    case 'statement.delete': return join([d.fileName, d.account, plural(d.transactions || 0, 'transaction')], ', ');
     case 'statement.approve': return join([d.fileName, plural(d.transactions || 0, 'transaction')], ', ');
     case 'user.create': return d.name ? `${d.name} (${d.email}) as ${d.role}` : '';
     case 'user.update': return join([d.name, changeText(d.changes, d.passwordReset)], ': ');

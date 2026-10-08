@@ -37,6 +37,7 @@ const ROUTES = [
   ['patch', `/api/statements/${ID}/include`, FIN],
   ['post', `/api/statements/${ID}/recategorize`, FIN],
   ['post', `/api/statements/${ID}/approve`, ADMIN],
+  ['delete', `/api/statements/${ID}`, ADMIN],
   ['get', '/api/audit-logs', ADMIN],
   ['get', '/api/categories/all', ADMIN],
   ['post', '/api/categories/types', ADMIN],
