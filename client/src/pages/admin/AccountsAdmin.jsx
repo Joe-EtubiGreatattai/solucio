@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { api } from '../../api';
 import { useLiveRefresh } from '../../realtime/RealtimeProvider';
 import Field from '../../components/Field';
+import AmountInput from '../../components/AmountInput';
 import TableWrap from '../../components/TableWrap';
 import { formatNaira, koboToNaira, nairaToKobo } from '../../utils/money';
 
@@ -83,7 +84,7 @@ export default function AccountsAdmin() {
             <Field label="Account number" error={errors.accountNumber}><input value={form.accountNumber} onChange={set('accountNumber')} /></Field>
           </>
         )}
-        <Field label="Opening balance (₦)" error={errors.opening || errors.openingBalance}><input inputMode="decimal" value={form.opening} onChange={set('opening')} /></Field>
+        <Field label="Opening balance (₦)" error={errors.opening || errors.openingBalance}><AmountInput value={form.opening} onChange={(v) => setForm({ ...form, opening: v })} /></Field>
         <div className="row">
           <button disabled={saving}>{saving ? 'Saving…' : (editingId ? 'Update account' : 'Save account')}</button>
           {editingId && <button type="button" className="secondary" onClick={() => { setEditingId(null); setForm(EMPTY); setShowForm(false); }}>Cancel</button>}

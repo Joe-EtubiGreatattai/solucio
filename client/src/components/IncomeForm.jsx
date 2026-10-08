@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import Field from './Field';
+import AmountInput from './AmountInput';
 import { nairaToKobo } from '../utils/money';
 import { lagosToday } from '../utils/dates';
 import { accountLabel } from '../utils/labels';
@@ -44,7 +45,7 @@ export default function IncomeForm({ accounts, onSubmit }) {
   return (
     <form className="card grid" onSubmit={submit}>
       <Field label="Amount (₦)" error={errors.amount}>
-        <input inputMode="decimal" placeholder="0.00" value={amount} onChange={(e) => setAmount(e.target.value)} onBlur={checkAmount} />
+        <AmountInput placeholder="0.00" value={amount} onChange={setAmount} onBlur={checkAmount} />
       </Field>
       <Field label="Date" error={errors.date}>
         <input type="date" max={lagosToday()} value={date} onChange={(e) => setDate(e.target.value)} />

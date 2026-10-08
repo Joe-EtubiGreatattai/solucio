@@ -18,11 +18,14 @@ test('hints at the format and validates the amount as soon as the field is left'
   const amount = screen.getByLabelText('Amount (₦)');
   expect(amount).toHaveAttribute('placeholder', '0.00');
   await userEvent.type(amount, 'abc');
+  expect(amount).toHaveValue(''); // letters never make it into the field
   expect(screen.queryByText(/Enter a valid amount/)).toBeNull();
+  await userEvent.type(amount, '12.'); // an incomplete amount is flagged on blur
   await userEvent.tab();
   expect(screen.getByText(/Enter a valid amount/)).toBeInTheDocument();
   await userEvent.clear(amount);
-  await userEvent.type(amount, '250');
+  await userEvent.type(amount, '2500');
+  expect(amount).toHaveValue('2,500'); // and commas appear as you type
   await userEvent.tab();
   expect(screen.queryByText(/Enter a valid amount/)).toBeNull();
 });
