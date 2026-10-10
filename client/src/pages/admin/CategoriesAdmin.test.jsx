@@ -172,3 +172,26 @@ test('shows a loading animation while switching category trees', async () => {
   expect(await screen.findByRole('heading', { name: 'Diagnostics' })).toBeInTheDocument();
   expect(screen.queryByText('Loading categories…')).toBeNull();
 });
+
+describe('renaming', () => {
+  test('edits a group name and sends the rename with its kind', async () => {
+    render(<CategoriesAdmin />);
+    await screen.findByText('Rents');
+    await userEvent.click(screen.getByRole('button', { name: 'Rename group Rents in Recurrent' }));
+    const input = screen.getByLabelText('New name for group Rents in Recurrent');
+    await userEvent.clear(input);
+    await userEvent.type(input, 'Rent & Lease');
+    api.post.mockResolvedValue(tree);
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+    expect(api.post).toHaveBeenCalledWith('/categories/rename', { type: 'Recurrent', group: 'Rents', name: 'Rent & Lease', kind: 'expense' });
+  });
+
+  test('cancel leaves the name unchanged', async () => {
+    render(<CategoriesAdmin />);
+    await screen.findByText('Rents');
+    await userEvent.click(screen.getByRole('button', { name: 'Rename group Rents in Recurrent' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(screen.getByRole('button', { name: 'Rename group Rents in Recurrent' })).toBeInTheDocument();
+    expect(api.post).not.toHaveBeenCalled();
+  });
+});

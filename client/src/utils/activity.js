@@ -19,6 +19,7 @@ export const ACTIONS = [
   { value: 'category.add', label: 'Added category' },
   { value: 'category.update', label: 'Changed category' },
   { value: 'category.remove', label: 'Removed category' },
+  { value: 'category.rename', label: 'Renamed category' },
   { value: 'role.create', label: 'Created role' },
   { value: 'role.update', label: 'Changed role' },
   { value: 'role.delete', label: 'Deleted role' },
@@ -69,6 +70,7 @@ export function describeActivity(entry) {
     case 'account.update': return join([d.name, changeText(d.changes)], ': ');
     case 'category.add': return d.path ? `${d.level}: ${d.path.join(' › ')}` : '';
     case 'category.remove': return d.path ? `${d.level}: ${d.path.join(' › ')}` : '';
+    case 'category.rename': return d.path ? `${d.path.join(' › ')} → ${d.name}` : '';
     case 'category.update': return d.path ? `${d.path.join(' › ')} ${d.active ? 'shown again' : 'hidden'}` : '';
     case 'role.create': return d.name ? `${d.name}, ${plural((d.permissions || []).length, 'permission')}` : '';
     case 'role.update': return join([d.name, roleChangeText(d.changes)], ': ');

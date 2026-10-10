@@ -157,4 +157,57 @@ async function removeNode({ kind = 'expense', type, group, item }) {
   return save(category);
 }
 
-module.exports = { ensureDefaultCategories, getTree, publicTree, assertValidCategory, addType, addGroup, addItem, setActive, removeNode };
+// Rename a category, group or item. Records store the name, so the new name is cascaded to every
+// income/expense record and every statement still in review, keeping past records consistent.
+async function renameNode({ kind = 'expense', type, group, item, name }) {
+  const Income = require('../models/Income');
+  const Expense = require('../models/Expense');
+  const Statement = require('../models/Statement');
+  const category = await load(type, kind);
+  const trimmed = String(name).trim();
+  if (!trimmed) throw new AppError(400, 'Enter a name', { name: 'Enter a name' });
+
+  let level;
+  if (item) {
+    const g = category.groups.find((x) => x.name === group);
+    if (!g) throw new AppError(404, 'Group not found');
+    const i = g.items.find((x) => x.name === item);
+    if (!i) throw new AppError(404, 'Item not found');
+    if (item !== trimmed) {
+      if (g.items.some((x) => x !== i && same(x.name, trimmed))) throw dup('item');
+      i.name = trimmed;
+    }
+    level = 'item';
+  } else if (group) {
+    const g = category.groups.find((x) => x.name === group);
+    if (!g) throw new AppError(404, 'Group not found');
+    if (group !== trimmed) {
+      if (category.groups.some((x) => x !== g && same(x.name, trimmed))) throw dup('group');
+      g.name = trimmed;
+    }
+    level = 'group';
+  } else {
+    if (type !== trimmed) {
+      const clash = await Category.findOne({ kind, name: trimmed }).collation({ locale: 'en', strength: 2 });
+      if (clash) throw dup('category');
+      category.name = trimmed;
+    }
+    level = 'category';
+  }
+  await save(category);
+
+  // Cascade the new name to records and review-statement transactions of the same kind.
+  const Model = kind === 'income' ? Income : Expense;
+  const direction = kind === 'income' ? 'income' : 'expense';
+  const recordMatch = { type, ...(group && { group }), ...(item && { item }) };
+  await Model.updateMany(recordMatch, { $set: { [level === 'category' ? 'type' : level]: trimmed } });
+  const filter = { 't.direction': direction, 't.type': type, ...(group && { 't.group': group }), ...(item && { 't.item': item }) };
+  await Statement.updateMany(
+    { status: 'review', transactions: { $elemMatch: { direction, ...recordMatch } } },
+    { $set: { [`transactions.$[t].${level === 'category' ? 'type' : level}`]: trimmed } },
+    { arrayFilters: [filter] },
+  );
+  return category;
+}
+
+module.exports = { ensureDefaultCategories, getTree, publicTree, assertValidCategory, addType, addGroup, addItem, setActive, removeNode, renameNode };

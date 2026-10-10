@@ -13,6 +13,9 @@ export default function CategoriesAdmin() {
   const [error, setError] = useState('');
   const [confirming, setConfirming] = useState(null);
   const [removing, setRemoving] = useState(null);
+  const [editing, setEditing] = useState(null);
+  const [renameDraft, setRenameDraft] = useState('');
+  const [renaming, setRenaming] = useState(false);
   const [kind, setKind] = useState('expense');
   const noun = kind === 'income' ? 'income' : 'expenses';
 
@@ -50,6 +53,31 @@ export default function CategoriesAdmin() {
     setRemoving(null);
     setConfirming(null);
   };
+  // Renaming cascades to past records on the server, so the whole tree comes back changed.
+  const startRename = (label, current) => { setError(''); setConfirming(null); setRenameDraft(current); setEditing(label); };
+  const submitRename = async (label, body) => {
+    const name = (renameDraft || '').trim();
+    if (!name) return;
+    setRenaming(true);
+    try {
+      setTree(await api.post('/categories/rename', { ...body, name, kind }));
+      setError('');
+      setEditing(null);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setRenaming(false);
+    }
+  };
+  const renameControls = (label, body, current) => (editing === label ? (
+    <span className="rename-inline">
+      <input aria-label={`New name for ${label}`} value={renameDraft} maxLength={60} autoFocus onChange={(e) => setRenameDraft(e.target.value)} />
+      <button type="button" className="link" disabled={renaming} onClick={() => submitRename(label, body)}>{renaming ? 'Saving…' : 'Save'}</button>
+      <button type="button" className="link" disabled={renaming} onClick={() => setEditing(null)}>Cancel</button>
+    </span>
+  ) : (
+    <button type="button" className="link" aria-label={`Rename ${label}`} onClick={() => startRename(label, current)}>Edit</button>
+  ));
   const removeControls = (label, body) => (confirming === label ? (
     <>
       <button type="button" className="link danger-text" aria-label={`Confirm remove ${label}`} disabled={removing === label} onClick={() => remove(label, body)}>
@@ -103,6 +131,7 @@ export default function CategoriesAdmin() {
             <h2>{c.type}</h2>
             {!c.active && <small className="muted">Hidden</small>}
             {showHide(c, `category ${c.type}`, { type: c.type })}
+            {renameControls(`category ${c.type}`, { type: c.type }, c.type)}
             {removeControls(`category ${c.type}`, { type: c.type })}
           </div>
           <ul className="tree">
@@ -112,6 +141,7 @@ export default function CategoriesAdmin() {
                   <b>{g.name}</b>
                   {!g.active && <small className="muted">Hidden</small>}
                   {showHide(g, `group ${g.name} in ${c.type}`, { type: c.type, group: g.name })}
+                  {renameControls(`group ${g.name} in ${c.type}`, { type: c.type, group: g.name }, g.name)}
                   {removeControls(`group ${g.name} in ${c.type}`, { type: c.type, group: g.name })}
                 </div>
                 <ul className="items">
@@ -120,6 +150,7 @@ export default function CategoriesAdmin() {
                       <span>{i.name}</span>
                       {!i.active && <small className="muted">Hidden</small>}
                       {showHide(i, `item ${i.name} in ${g.name}`, { type: c.type, group: g.name, item: i.name })}
+                      {renameControls(`item ${i.name} in ${g.name}`, { type: c.type, group: g.name, item: i.name }, i.name)}
                       {removeControls(`item ${i.name} in ${g.name}`, { type: c.type, group: g.name, item: i.name })}
                     </li>
                   ))}

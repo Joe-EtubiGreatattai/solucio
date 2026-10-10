@@ -197,3 +197,61 @@ describe('removing categories, groups and items', () => {
     expect(log.details).toMatchObject({ level: 'item', path: ['Capital', 'Structural', 'Furniture'] });
   });
 });
+
+describe('renaming categories, groups and items', () => {
+  const Expense = require('../src/models/Expense');
+  const Income = require('../src/models/Income');
+  const Statement = require('../src/models/Statement');
+  const rename = (token, body) => request(app).post('/api/categories/rename').set(auth(token)).send(body);
+  const income = (token, o) => request(app).post('/api/incomes').set(auth(token)).send({ amount: 1000, date: '2026-01-15', method: 'transfer', accountId: account.id, ...o });
+
+  test('renaming a group updates the tree and every expense and review-statement that used it', async () => {
+    await expense(admin.token, { type: 'Recurrent', group: 'Rents' });
+    await Statement.create({ account: account._id, fileName: 'x.pdf', uploadedBy: admin.user._id, status: 'review',
+      transactions: [{ date: new Date('2026-01-15'), narration: 'RENT', amount: 1000, direction: 'expense', type: 'Recurrent', group: 'Rents', item: null }] });
+
+    const res = await rename(admin.token, { type: 'Recurrent', group: 'Rents', name: 'Rent & Lease' });
+    expect(res.status).toBe(200);
+    expect(res.body.find((c) => c.type === 'Recurrent').groups.map((g) => g.name)).toContain('Rent & Lease');
+    expect(await Expense.countDocuments({ type: 'Recurrent', group: 'Rent & Lease' })).toBe(1);
+    expect(await Expense.countDocuments({ group: 'Rents' })).toBe(0);
+    const st = await Statement.findOne({});
+    expect(st.transactions[0].group).toBe('Rent & Lease');
+  });
+
+  test('renaming an item updates the expenses that used it', async () => {
+    await expense(admin.token, { type: 'Capital', group: 'Equipment', item: 'Nursing' });
+    await rename(admin.token, { type: 'Capital', group: 'Equipment', item: 'Nursing', name: 'Nursing Gear' });
+    expect(await Expense.countDocuments({ item: 'Nursing Gear' })).toBe(1);
+    expect(await Expense.countDocuments({ item: 'Nursing' })).toBe(0);
+  });
+
+  test('renaming a type updates its records', async () => {
+    await expense(admin.token, { type: 'Capital', group: 'Equipment', item: 'Nursing' });
+    await rename(admin.token, { type: 'Capital', name: 'Capital Spend' });
+    expect(await Expense.countDocuments({ type: 'Capital Spend' })).toBe(1);
+  });
+
+  test('renaming an income category only touches income records, by kind', async () => {
+    await income(admin.token, { type: 'Diagnostics', group: 'Laboratory' });
+    await expense(admin.token, { type: 'Recurrent', group: 'Rents' });
+    const res = await rename(admin.token, { kind: 'income', type: 'Diagnostics', group: 'Laboratory', name: 'Lab Services' });
+    expect(res.body.find((c) => c.type === 'Diagnostics').groups.map((g) => g.name)).toContain('Lab Services');
+    expect(await Income.countDocuments({ group: 'Lab Services' })).toBe(1);
+    expect(await Expense.countDocuments({ group: 'Rents' })).toBe(1); // untouched
+  });
+
+  test('rejects a name that clashes with a sibling, missing nodes, and non-managers', async () => {
+    expect((await rename(admin.token, { type: 'Recurrent', group: 'Rents', name: 'Staff Wages' })).status).toBe(409);
+    expect((await rename(admin.token, { type: 'Nope', name: 'X' })).status).toBe(404);
+    expect((await rename(admin.token, { type: 'Recurrent', group: 'Nope', name: 'X' })).status).toBe(404);
+    const cashier = await createUser('cashier');
+    expect((await rename(cashier.token, { type: 'Recurrent', name: 'X' })).status).toBe(403);
+  });
+
+  test('renames are audited', async () => {
+    await rename(admin.token, { type: 'Recurrent', group: 'Rents', name: 'Rent & Lease' });
+    const log = await AuditLog.findOne({ action: 'category.rename' }).lean();
+    expect(log.details).toMatchObject({ kind: 'expense', path: ['Recurrent', 'Rents'], name: 'Rent & Lease' });
+  });
+});

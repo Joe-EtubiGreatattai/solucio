@@ -71,3 +71,5 @@ body{font-size:15px}.side-nav a{font-size:13px}.workspace-head span{font-size:12
 .ledger-tab.active:hover:not(:disabled){background:var(--blue-hover);box-shadow:none;transform:none}
 .category-loading{display:grid;gap:12px;margin-top:4px}
 .category-loading .skeleton{min-height:56px;border-radius:12px}
+.rename-inline{display:inline-flex;align-items:center;gap:8px}
+.rename-inline input{min-height:30px;width:auto;min-width:160px;padding:4px 9px;font-size:12px}

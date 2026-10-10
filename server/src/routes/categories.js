@@ -69,4 +69,19 @@ router.post('/remove', ...manage, validate(removeBody), asyncHandler(async (req,
   res.json(await categories.getTree({ kind: b.kind, includeInactive: true }));
 }));
 
+const renameBody = z
+  .object({ kind, type: parent, group: parent.optional(), item: parent.optional(), name })
+  .refine((d) => !d.item || d.group, { message: 'Choose the group the item belongs to', path: ['group'] });
+
+// Rename a category, group or item; the new name is cascaded to the records that used the old one.
+router.post('/rename', ...manage, validate(renameBody), asyncHandler(async (req, res) => {
+  const b = req.validated.body;
+  const category = await categories.renameNode(b);
+  await logAudit({
+    actor: req.user._id, action: 'category.rename', targetModel: 'Category', targetId: category._id,
+    details: { kind: b.kind, level: b.item ? 'item' : b.group ? 'group' : 'category', path: [b.type, b.group, b.item].filter(Boolean), name: b.name.trim() },
+  });
+  res.json(await categories.getTree({ kind: b.kind, includeInactive: true }));
+}));
+
 module.exports = router;
