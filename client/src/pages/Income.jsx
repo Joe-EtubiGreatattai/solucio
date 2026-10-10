@@ -29,7 +29,7 @@ export default function Income() {
   const { accounts, error: accountsError } = useAccounts();
   const { categories } = useCategories('income');
   const categoryPath = (i) => [i.type, i.group, i.item].filter(Boolean).join(' › ');
-  const [filters, setFilters] = useStoredState('solucio:income-filters', { from: '', to: '', status: 'all', method: '', accountId: '' });
+  const [filters, setFilters] = useStoredState('solucio:income-filters', { from: '', to: '', status: 'all', method: '', accountId: '', type: '', group: '', item: '' });
   const [data, setData] = useState({ items: [], total: 0 });
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState('');
@@ -59,12 +59,18 @@ export default function Income() {
     load();
   };
   const setFilter = (k) => (e) => setFilters({ ...filters, [k]: e.target.value });
-  const filtered = !!(filters.from || filters.to || filters.status !== 'all' || filters.method || filters.accountId);
+  // Income category filter cascades like the record form: a higher level clears what's below it.
+  const setTypeFilter = (e) => setFilters({ ...filters, type: e.target.value, group: '', item: '' });
+  const setGroupFilter = (e) => setFilters({ ...filters, group: e.target.value, item: '' });
+  const groupsForType = (categories.find((c) => c.type === filters.type) || {}).groups || [];
+  const itemsForGroup = (groupsForType.find((g) => g.name === filters.group) || {}).items || [];
+  const filtered = !!(filters.from || filters.to || filters.status !== 'all' || filters.method || filters.accountId || filters.type || filters.group || filters.item);
 
   const exportFile = async () => {
     setExporting(true);
     try {
-      const blob = await api.blob('/reports/export', { type: 'income', format: exportFormat, ...filters });
+      const { type, ...rest } = filters;
+      const blob = await api.blob('/reports/export', { type: 'income', format: exportFormat, categoryType: type, ...rest });
       downloadBlob(blob, `solucio-income.${exportFormat}`);
     } catch (e) {
       setError(e.message);
@@ -122,6 +128,30 @@ export default function Income() {
               {accounts.map((a) => <option key={a._id} value={a._id}>{accountLabel(a)}</option>)}
             </select>
           </Field>
+          {categories.length > 0 && (
+            <Field label="Category">
+              <select value={filters.type} onChange={setTypeFilter}>
+                <option value="">All</option>
+                {categories.map((c) => <option key={c.type} value={c.type}>{c.type}</option>)}
+              </select>
+            </Field>
+          )}
+          {filters.type && (
+            <Field label="Group">
+              <select value={filters.group} onChange={setGroupFilter}>
+                <option value="">All</option>
+                {groupsForType.map((g) => <option key={g.name} value={g.name}>{g.name}</option>)}
+              </select>
+            </Field>
+          )}
+          {itemsForGroup.length > 0 && (
+            <Field label="Item">
+              <select value={filters.item} onChange={setFilter('item')}>
+                <option value="">All</option>
+                {itemsForGroup.map((i) => <option key={i} value={i}>{i}</option>)}
+              </select>
+            </Field>
+          )}
           </div>
         </details>
         <div className="card row export-controls">

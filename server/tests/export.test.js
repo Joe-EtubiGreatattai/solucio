@@ -109,6 +109,18 @@ describe('exporting with the filters shown on the Income/Expenses pages', () => 
     expect(ws.rowCount).toBe(6); // header rows + one matching row + total
   });
 
+  test('income export can be filtered by income category', async () => {
+    await makeIncome({ ...ctx, amount: 60000, type: 'Diagnostics', group: 'Laboratory', item: null, receiptNumber: 'RCP-L' });
+    await makeIncome({ ...ctx, amount: 20000, type: 'Pharmacy', group: 'Drug Sales', item: null, receiptNumber: 'RCP-P' });
+    const res = await exportReq('type=income&format=xlsx&categoryType=Diagnostics');
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(res.body);
+    const ws = wb.worksheets[0];
+    // header rows (4) + one matching row + total = 6
+    expect(ws.rowCount).toBe(6);
+    expect(ws.getRow(5).getCell(2).value).toBe('RCP-L');
+  });
+
   test('income and expense exports fall back to "All dates" when no range is given', async () => {
     const res = await exportReq('type=income&format=xlsx');
     const wb = new ExcelJS.Workbook();

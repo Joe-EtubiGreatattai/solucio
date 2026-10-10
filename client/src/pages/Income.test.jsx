@@ -241,3 +241,36 @@ describe('exporting the filtered list', () => {
     expect(screen.getByRole('button', { name: 'Export' })).toBeInTheDocument();
   });
 });
+
+describe('filtering by income category', () => {
+  const incomeCats = [{ type: 'Diagnostics', groups: [{ name: 'Laboratory', items: [] }, { name: 'Radiology', items: ['X-ray'] }] }];
+  const incomeCalls = () => api.get.mock.calls.filter((c) => c[0] === '/incomes').map((c) => c[1]);
+  beforeEach(() => {
+    api.get.mockImplementation((path, query) => Promise.resolve(
+      path === '/accounts' ? [{ _id: 'a1', name: 'Main', type: 'cash' }]
+        : path === '/categories' && query && query.kind === 'income' ? incomeCats
+          : { items: [], total: 0 }));
+    api.blob.mockResolvedValue(new Blob(['x']));
+  });
+
+  test('choosing a category, group and item asks the server to filter by them', async () => {
+    renderIncome();
+    await waitFor(() => expect(incomeCalls().length).toBeGreaterThan(0));
+    const panel = screen.getByRole('group', { name: 'Income filters' });
+    await userEvent.selectOptions(within(panel).getByLabelText('Category'), 'Diagnostics');
+    expect(incomeCalls().at(-1)).toMatchObject({ type: 'Diagnostics' });
+    await userEvent.selectOptions(within(panel).getByLabelText('Group'), 'Radiology');
+    expect(incomeCalls().at(-1)).toMatchObject({ type: 'Diagnostics', group: 'Radiology' });
+    await userEvent.selectOptions(within(panel).getByLabelText('Item'), 'X-ray');
+    expect(incomeCalls().at(-1)).toMatchObject({ type: 'Diagnostics', group: 'Radiology', item: 'X-ray' });
+  });
+
+  test('export maps the category filter to categoryType so it does not clobber type:income', async () => {
+    renderIncome();
+    await waitFor(() => expect(incomeCalls().length).toBeGreaterThan(0));
+    const panel = screen.getByRole('group', { name: 'Income filters' });
+    await userEvent.selectOptions(within(panel).getByLabelText('Category'), 'Diagnostics');
+    await userEvent.click(screen.getByRole('button', { name: 'Export' }));
+    expect(api.blob).toHaveBeenCalledWith('/reports/export', expect.objectContaining({ type: 'income', categoryType: 'Diagnostics' }));
+  });
+});

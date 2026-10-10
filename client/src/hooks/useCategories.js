@@ -7,7 +7,7 @@ export function useCategories(kind = 'expense') {
   const [categories, setCategories] = useState([]);
   const [error, setError] = useState('');
   useEffect(() => {
-    api.get('/categories', { kind }).then(setCategories).catch((e) => { setCategories([]); setError(e.message || 'Could not load categories'); });
+    api.get('/categories', { kind }).then((d) => setCategories(Array.isArray(d) ? d : [])).catch((e) => { setCategories([]); setError(e.message || 'Could not load categories'); });
   }, [live, kind]);
   return { categories, error };
 }

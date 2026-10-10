@@ -20,6 +20,9 @@ async function incomeTable(from, to, filters = {}) {
   const filter = { ...dateFilter(from, to), ...statusFilter(filters.status) };
   if (filters.accountId) filter.account = filters.accountId;
   if (filters.method) filter.method = filters.method;
+  if (filters.type) filter.type = filters.type;
+  if (filters.group) filter.group = filters.group;
+  if (filters.item) filter.item = filters.item;
   const items = await withPopulate(Income.find(filter).sort({ date: 1, createdAt: 1 }));
   return {
     title: 'Income',
