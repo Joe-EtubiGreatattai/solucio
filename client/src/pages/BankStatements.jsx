@@ -33,6 +33,7 @@ export default function BankStatements() {
   const [selectedId, setSelectedId] = useState('');
   const [selectedTransactionId, setSelectedTransactionId] = useState('');
   const [categories, setCategories] = useState([]);
+  const [incomeCategories, setIncomeCategories] = useState([]);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [uploading, setUploading] = useState(false);
@@ -61,6 +62,7 @@ export default function BankStatements() {
 
   useEffect(() => { load(); }, [load]);
   useEffect(() => { api.get('/categories').then(setCategories).catch(() => setCategories([])); }, [categoriesLive]);
+  useEffect(() => { api.get('/categories', { kind: 'income' }).then(setIncomeCategories).catch(() => setIncomeCategories([])); }, [categoriesLive]);
 
   const statement = statements.find((entry) => entry._id === selectedId);
   const transaction = statement?.transactions.find((entry) => entry._id === selectedTransactionId) || statement?.transactions[0];
@@ -197,6 +199,9 @@ export default function BankStatements() {
 
   const selectedType = categories.find((entry) => entry.type === transaction?.type) || categories[0];
   const selectedGroup = selectedType?.groups.find((entry) => entry.name === transaction?.group) || selectedType?.groups[0];
+  // Income category is optional, so no auto-fallback to the first type/group.
+  const selectedIncomeType = incomeCategories.find((entry) => entry.type === transaction?.type);
+  const selectedIncomeGroup = selectedIncomeType?.groups.find((entry) => entry.name === transaction?.group) || selectedIncomeType?.groups[0];
   const canApprove = unresolved === 0 && includedTransactions.length > 0;
 
   return (
@@ -299,6 +304,11 @@ export default function BankStatements() {
                       <label className="field"><span>Type</span><select value={transaction.type || selectedType?.type || ''} onChange={(event) => saveTransaction({ type: event.target.value, group: '', item: null, confidence: 'needs-review' })}>{categories.map((entry) => <option key={entry.type} value={entry.type}>{entry.type}</option>)}</select></label>
                       <label className="field"><span>Group</span><select value={transaction.group || selectedGroup?.name || ''} onChange={(event) => saveTransaction({ type: selectedType?.type, group: event.target.value, item: null, confidence: 'needs-review' })}>{selectedType?.groups.map((entry) => <option key={entry.name} value={entry.name}>{entry.name}</option>)}</select></label>
                       {selectedGroup?.items?.length > 0 && <label className="field"><span>Item</span><select value={transaction.item || ''} onChange={(event) => saveTransaction({ item: event.target.value, confidence: 'needs-review' })}><option value="">Choose item</option>{selectedGroup.items.map((entry) => <option key={entry} value={entry}>{entry}</option>)}</select></label>}
+                    </>}
+                    {transaction.direction === 'income' && incomeCategories.length > 0 && <>
+                      <label className="field"><span>Category (optional)</span><select value={transaction.type || ''} onChange={(event) => { const t = event.target.value; const firstGroup = incomeCategories.find((c) => c.type === t)?.groups?.[0]; saveTransaction({ type: t || null, group: t ? (firstGroup?.name || null) : null, item: null }); }}><option value="">No category</option>{incomeCategories.map((entry) => <option key={entry.type} value={entry.type}>{entry.type}</option>)}</select></label>
+                      {transaction.type && <label className="field"><span>Group</span><select value={transaction.group || selectedIncomeGroup?.name || ''} onChange={(event) => saveTransaction({ type: selectedIncomeType?.type, group: event.target.value, item: null })}>{selectedIncomeType?.groups.map((entry) => <option key={entry.name} value={entry.name}>{entry.name}</option>)}</select></label>}
+                      {transaction.type && selectedIncomeGroup?.items?.length > 0 && <label className="field"><span>Item</span><select value={transaction.item || ''} onChange={(event) => saveTransaction({ item: event.target.value })}><option value="">Choose item</option>{selectedIncomeGroup.items.map((entry) => <option key={entry} value={entry}>{entry}</option>)}</select></label>}
                     </>}
                     <label className="check"><input type="checkbox" checked={isIncluded(transaction)} onChange={() => toggleInclude(transaction)} /><span>Import this transaction</span></label>
                     <button type="button" onClick={() => saveTransaction({ confidence: 'high' })}>Mark reviewed</button>

@@ -155,11 +155,12 @@ function treeNames(tree) {
 }
 
 // Learn payee -> category from rows a person decided (or approved), across earlier statements.
-function buildMemory(statements) {
+function buildMemory(statements, direction = 'expense') {
   const memory = new Map();
   for (const statement of statements) {
     for (const t of statement.transactions || []) {
-      if (t.direction !== 'expense' || !t.type || !t.group || isBankCharge(t.narration)) continue;
+      if (t.direction !== direction || !t.type || !t.group) continue;
+      if (direction === 'expense' && isBankCharge(t.narration)) continue;
       const decidedByPerson = ['reviewer', 'similar'].includes(t.categorySource)
         || (!t.categorySource && t.reviewedAt && t.confidence === 'high');
       const approved = statement.status === 'approved' && t.included !== false;
@@ -257,12 +258,35 @@ function categorizeExpense(t, { resolve, memory, names, ownerName }) {
   return { ...blank, confidence: 'needs-review', categorySource: 'rule', reason: describeUnknown(narration, payee) };
 }
 
-function categorizeIncome(t, { ownerName }) {
+function categorizeIncome(t, { resolve, memory, names, ownerName }) {
   const narration = t.narration || '';
   const result = (confidence, reason) => ({ ...blank, confidence, categorySource: 'rule', reason });
   if (REVERSAL.test(narration)) return result('needs-review', 'Reversal of an earlier payment, not new income. Usually left out.');
   if (LOAN.test(narration)) return result('needs-review', 'Looks like a loan rather than earned income');
   if (isOwner(narration, ownerName)) return result('needs-review', 'Looks like a transfer from the account holder\'s own account, not income');
+
+  // An income payee a reviewer has categorized before gets that income category.
+  const payee = payeeOf(narration);
+  const remembered = payee.key ? recall(memory, payee.key) : null;
+  if (remembered) {
+    const top = remembered.find((entry) => resolve(entry)?.exact);
+    if (top) {
+      const target = resolve(top);
+      const unanimous = top.count === top.total;
+      return {
+        ...target,
+        confidence: unanimous ? 'high' : 'medium',
+        categorySource: 'memory',
+        reason: unanimous
+          ? `Same payee as ${top.total} reviewed transaction${top.total === 1 ? '' : 's'}`
+          : `Same payee as earlier transactions; ${top.count} of ${top.total} were ${label(target)}`,
+      };
+    }
+  }
+  const named = names.find((entry) => spaced(narration).includes(` ${entry.phrase} `));
+  if (named) return { type: named.type, group: named.group, item: named.item, confidence: 'medium', categorySource: 'rule', reason: `Mentions "${named.name}"` };
+
+  // Otherwise flag what kind of income it looks like; a category can still be chosen (it is optional).
   if (MEDICAL_BILL.test(narration)) return result('high', 'Payment for medical bills');
   if (HMOS.test(narration)) return result('high', 'HMO payment');
   if (PROCESSORS.test(narration)) return result('high', 'Card or online payment settlement');
@@ -292,16 +316,18 @@ function pairReversals(rows, results) {
 }
 
 // Pure: suggests type/group/item, confidence, a plain-English reason and (for reversal pairs) inclusion.
-function categorizeTransactions(rows, { tree = [], memory = new Map(), ownerName = '' } = {}) {
-  const context = { resolve: resolver(tree), memory, names: treeNames(tree), ownerName };
-  const results = rows.map((t) => (t.direction === 'income' ? categorizeIncome(t, context) : categorizeExpense(t, context)));
+function categorizeTransactions(rows, { tree = [], memory = new Map(), incomeTree = [], incomeMemory = new Map(), ownerName = '' } = {}) {
+  const expenseCtx = { resolve: resolver(tree), memory, names: treeNames(tree), ownerName };
+  const incomeCtx = { resolve: resolver(incomeTree), memory: incomeMemory, names: treeNames(incomeTree), ownerName };
+  const results = rows.map((t) => (t.direction === 'income' ? categorizeIncome(t, incomeCtx) : categorizeExpense(t, expenseCtx)));
   pairReversals(rows, results);
   return results;
 }
 
 async function loadCategorizerContext() {
-  const [tree, statements] = await Promise.all([
-    publicTree(),
+  const [tree, incomeTree, statements] = await Promise.all([
+    publicTree('expense'),
+    publicTree('income'),
     Statement.find({}, {
       status: 1,
       'transactions.narration': 1, 'transactions.direction': 1, 'transactions.type': 1, 'transactions.group': 1,
@@ -309,7 +335,7 @@ async function loadCategorizerContext() {
       'transactions.confidence': 1, 'transactions.included': 1,
     }).lean(),
   ]);
-  return { tree, memory: buildMemory(statements) };
+  return { tree, incomeTree, memory: buildMemory(statements, 'expense'), incomeMemory: buildMemory(statements, 'income') };
 }
 
 module.exports = { categorizeTransactions, loadCategorizerContext, buildMemory, payeeOf, isBankCharge };

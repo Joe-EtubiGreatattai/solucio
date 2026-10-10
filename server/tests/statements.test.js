@@ -265,6 +265,46 @@ describe('smarter categorization', () => {
   });
 });
 
+describe('income categories on import', () => {
+  const Income = require('../src/models/Income');
+  const incomeRowCat = (overrides = {}) => incomeRow({ type: 'Diagnostics', group: 'Laboratory', item: null, confidence: 'high', ...overrides });
+
+  test('an approved income row posts an Income with its income category', async () => {
+    const statement = await makeStatement([incomeRowCat()]);
+    const res = await request(app).post(`/api/statements/${statement.id}/approve`).set(auth(admin.token));
+    expect(res.status).toBe(200);
+    const income = await Income.findOne({});
+    expect(income).toMatchObject({ type: 'Diagnostics', group: 'Laboratory', item: null });
+  });
+
+  test('income with no category still imports, just uncategorized', async () => {
+    const statement = await makeStatement([incomeRow({ confidence: 'high' })]);
+    await request(app).post(`/api/statements/${statement.id}/approve`).set(auth(admin.token));
+    const income = await Income.findOne({});
+    expect(income.type).toBeNull();
+  });
+
+  test('an income category that no longer exists blocks approval', async () => {
+    const statement = await makeStatement([incomeRowCat({ group: 'Gone' })]);
+    const res = await request(app).post(`/api/statements/${statement.id}/approve`).set(auth(admin.token));
+    expect(res.status).toBe(409);
+    expect(await Income.countDocuments()).toBe(0);
+  });
+
+  test('confirming an income category spreads to other income rows from the same payee', async () => {
+    const statement = await makeStatement([
+      incomeRow({ narration: 'NIP CR/MOB/PATIENT ADA/GTB', confidence: 'needs-review' }),
+      incomeRow({ narration: 'NIP CR/MOB/PATIENT ADA/GTB', confidence: 'needs-review' }),
+      incomeRow({ narration: 'NIP CR/MOB/SOMEONE ELSE/GTB', confidence: 'needs-review' }),
+    ]);
+    const res = await request(app).patch(`/api/statements/${statement.id}/transactions/${statement.transactions[0]._id}`)
+      .set(auth(accountant.token)).send({ type: 'Diagnostics', group: 'Laboratory', item: null, confidence: 'high' });
+    expect(res.body.similarUpdated).toBe(1);
+    expect(res.body.transactions[1]).toMatchObject({ group: 'Laboratory', categorySource: 'similar' });
+    expect(res.body.transactions[2].group).toBeFalsy();
+  });
+});
+
 describe('deleting a statement', () => {
   const del = (token, statement) => request(app).delete(`/api/statements/${statement.id}`).set(auth(token));
 

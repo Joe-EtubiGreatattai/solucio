@@ -259,3 +259,41 @@ describe('Zenith Bank wording', () => {
     expect(one(narration, 'income', { ownerName: 'SOLUCIO CLINICS' })).toMatchObject({ confidence: 'high', reason: 'Payment for medical bills' });
   });
 });
+
+describe('income categorization', () => {
+  const incomeTree = [{ type: 'Diagnostics', groups: [{ name: 'Laboratory', items: [] }, { name: 'Radiology', items: ['X-ray'] }] }];
+  const incRow = (narration) => ({ _id: `i${(seq += 1)}`, date: new Date('2026-07-01'), narration, direction: 'income', amount: 100000 });
+  const cat = (narration, opts = {}) => categorizeTransactions([incRow(narration)], { incomeTree, ...opts })[0];
+
+  test('a reviewer\'s income category for a payee is reused on later income from that payee', () => {
+    const incomeMemory = buildMemory([{ status: 'review', transactions: [
+      { narration: 'NIP CR/MOB/LABATTENDANT ADA/GTB /lab tests', direction: 'income', type: 'Diagnostics', group: 'Laboratory', item: null, categorySource: 'reviewer' },
+    ] }], 'income');
+    expect(cat('NIP CR/MOB/LABATTENDANT ADA/GTB /more tests', { incomeMemory })).toMatchObject({
+      type: 'Diagnostics', group: 'Laboratory', categorySource: 'memory', confidence: 'high',
+    });
+  });
+
+  test('income learning is kept separate from expense learning', () => {
+    const statements = [{ status: 'approved', transactions: [
+      { narration: 'TRF TO PAY/ ADA SUPPLIER', direction: 'expense', type: 'Recurrent', group: 'Rents', item: null, included: true },
+      { narration: 'NIP CR/MOB/ADA SUPPLIER/GTB', direction: 'income', type: 'Diagnostics', group: 'Laboratory', item: null, included: true },
+    ] }];
+    expect(buildMemory(statements, 'expense').size).toBe(1);
+    expect(buildMemory(statements, 'income').size).toBe(1);
+    // the income suggestion for this payee is the income category, not the expense one
+    expect(cat('NIP CR/MOB/ADA SUPPLIER/GTB', { incomeMemory: buildMemory(statements, 'income') })).toMatchObject({ group: 'Laboratory' });
+  });
+
+  test('without a learned category, income still gets its plain-English reason and no category', () => {
+    expect(cat('HYGEIA HMO CLAIMS SETTLEMENT')).toMatchObject({ confidence: 'high', type: null, reason: expect.stringMatching(/HMO/) });
+    expect(cat('NIP TFR FROM ANTHONY UMORU')).toMatchObject({ confidence: 'medium', type: null });
+  });
+
+  test('a learned income category that was removed from the income tree is ignored', () => {
+    const incomeMemory = buildMemory([{ status: 'review', transactions: [
+      { narration: 'NIP CR/MOB/ADA/GTB', direction: 'income', type: 'Gone', group: 'Removed', item: null, categorySource: 'reviewer' },
+    ] }], 'income');
+    expect(cat('NIP CR/MOB/ADA/GTB', { incomeMemory }).categorySource).not.toBe('memory');
+  });
+});

@@ -86,6 +86,12 @@ router.patch('/:id/transactions/:transactionId', requirePermission('statements.r
   if (!transaction) throw new AppError(404, 'Transaction not found');
   const body = req.validated.body;
   Object.assign(transaction, body, { reviewedBy: req.user._id, reviewedAt: new Date() });
+  // Changing a row's direction drops any category from the other ledger, which no longer applies.
+  if ('direction' in body && !('type' in body)) {
+    transaction.type = null;
+    transaction.group = null;
+    transaction.item = null;
+  }
   if (['type', 'group', 'item', 'direction', 'confidence'].some((key) => key in body)) {
     transaction.categorySource = 'reviewer';
     transaction.reason = `Chosen by ${req.user.name}`;
@@ -93,11 +99,11 @@ router.patch('/:id/transactions/:transactionId', requirePermission('statements.r
 
   // Confirming a category teaches every other row to the same payee that nobody has decided yet.
   let similarUpdated = 0;
-  const confirmed = body.confidence === 'high' && transaction.direction === 'expense' && transaction.type && transaction.group;
+  const confirmed = body.confidence === 'high' && transaction.type && transaction.group;
   const { key } = payeeOf(transaction.narration);
   if (confirmed && key && !isBankCharge(transaction.narration)) {
     for (const other of statement.transactions) {
-      if (other._id.equals(transaction._id) || other.direction !== 'expense' || decidedByPerson(other) || isBankCharge(other.narration)) continue;
+      if (other._id.equals(transaction._id) || other.direction !== transaction.direction || decidedByPerson(other) || isBankCharge(other.narration)) continue;
       if (payeeOf(other.narration).key !== key) continue;
       const already = other.type === transaction.type && other.group === transaction.group
         && (other.item || null) === (transaction.item || null) && other.confidence === 'high';
@@ -185,9 +191,9 @@ router.post('/:id/approve', requirePermission('statements.approve'), asyncHandle
   // Check every included expense against the current category tree before posting anything,
   // so a half-imported statement can never happen.
   for (const transaction of included) {
-    if (transaction.direction !== 'expense') continue;
+    if (!transaction.type) continue; // income may be left uncategorized
     try {
-      await assertValidCategory(transaction.type, transaction.group, transaction.item);
+      await assertValidCategory(transaction.type, transaction.group, transaction.item, transaction.direction === 'income' ? 'income' : 'expense');
     } catch (err) {
       if (!(err instanceof AppError)) throw err;
       throw new AppError(409, `"${transaction.narration}" has a category that no longer exists. Fix it before approving.`);
@@ -203,6 +209,7 @@ router.post('/:id/approve', requirePermission('statements.approve'), asyncHandle
       const income = await Income.create({
         amount: transaction.amount, date: transaction.date, method: 'transfer', account: account._id,
         receiptNumber, recordedBy: req.user._id,
+        type: transaction.type || null, group: transaction.group || null, item: transaction.item || null,
       });
       await logAudit({
         actor: req.user._id, action: 'income.create', targetModel: 'Income', targetId: income._id,

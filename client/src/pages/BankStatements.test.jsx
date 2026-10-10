@@ -8,6 +8,7 @@ vi.mock('../api', () => ({ api: { get: vi.fn(), post: vi.fn(), patch: vi.fn(), d
 
 const account = { _id: 'a1', name: 'Main Operations', type: 'bank', bankName: 'GTBank', accountNumber: '0123456789' };
 const categories = [{ type: 'Recurrent', groups: [{ name: 'Servicing & Maintenance', items: ['Electricity', 'Fuel'] }] }];
+const incomeCategories = [{ type: 'Diagnostics', groups: [{ name: 'Laboratory', items: [] }, { name: 'Radiology', items: ['X-ray'] }] }];
 const expenseTx = { _id: 't1', date: '2026-07-15', narration: 'IBEDC PREPAID METER', amount: 975000, direction: 'expense', type: 'Recurrent', group: 'Servicing & Maintenance', item: 'Electricity', confidence: 'high', included: true };
 const incomeTx = { _id: 't2', date: '2026-07-16', narration: 'NIP TFR FROM PATIENT', amount: 500000, direction: 'income', confidence: 'high', included: true };
 const statement = { _id: 's1', fileName: 'july.pdf', status: 'review', createdAt: '2026-07-20', account, uploadedBy: { name: 'Ada' }, transactions: [expenseTx, incomeTx] };
@@ -16,9 +17,9 @@ const withTransactions = (transactions) => ({ ...statement, transactions });
 
 beforeEach(() => {
   vi.clearAllMocks();
-  api.get.mockImplementation((path) => {
+  api.get.mockImplementation((path, query) => {
     if (path === '/accounts') return Promise.resolve([account]);
-    if (path === '/categories') return Promise.resolve(categories);
+    if (path === '/categories') return Promise.resolve(query && query.kind === 'income' ? incomeCategories : categories);
     if (path === '/statements') return Promise.resolve([statement]);
     return Promise.resolve([]);
   });
@@ -204,5 +205,19 @@ describe('deleting a statement', () => {
     renderPage({ can: (p) => p !== 'statements.approve' });
     await waitForLoaded();
     expect(screen.queryByRole('button', { name: 'Delete statement' })).toBeNull();
+  });
+});
+
+
+describe('income categorization in the review panel', () => {
+  test('an income row can be given an income category', async () => {
+    api.patch.mockResolvedValue(withTransactions([expenseTx, { ...incomeTx, type: 'Diagnostics', group: 'Laboratory' }]));
+    renderPage();
+    await waitForLoaded();
+    await userEvent.click(screen.getAllByText('NIP TFR FROM PATIENT')[0]);
+    // income rows get an income category selector, not the expense "Type" one
+    expect(screen.queryByLabelText('Type')).toBeNull();
+    await userEvent.selectOptions(screen.getByLabelText('Category (optional)'), 'Diagnostics');
+    expect(api.patch).toHaveBeenCalledWith('/statements/s1/transactions/t2', expect.objectContaining({ type: 'Diagnostics', group: 'Laboratory' }));
   });
 });
