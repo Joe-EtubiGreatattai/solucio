@@ -69,3 +69,5 @@ body{font-size:15px}.side-nav a{font-size:13px}.workspace-head span{font-size:12
 .ledger-tab:hover:not(.active):not(:disabled){background:#fff;color:var(--ink);box-shadow:none;transform:none}
 .ledger-tab.active{background:var(--blue);color:#fff;box-shadow:none}
 .ledger-tab.active:hover:not(:disabled){background:var(--blue-hover);box-shadow:none;transform:none}
+.category-loading{display:grid;gap:12px;margin-top:4px}
+.category-loading .skeleton{min-height:56px;border-radius:12px}

@@ -2,10 +2,12 @@ import { useEffect, useState } from 'react';
 import { api } from '../../api';
 import { useLiveRefresh } from '../../realtime/RealtimeProvider';
 import Field from '../../components/Field';
+import { Skeleton } from '../../components/Skeleton';
 
 export default function CategoriesAdmin() {
   const live = useLiveRefresh(['categories']);
   const [tree, setTree] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [drafts, setDrafts] = useState({});
   const [fieldError, setFieldError] = useState({});
   const [error, setError] = useState('');
@@ -15,7 +17,8 @@ export default function CategoriesAdmin() {
   const noun = kind === 'income' ? 'income' : 'expenses';
 
   useEffect(() => {
-    api.get('/categories/all', { kind }).then(setTree).catch((e) => setError(e.message));
+    setLoading(true);
+    api.get('/categories/all', { kind }).then(setTree).catch((e) => setError(e.message)).finally(() => setLoading(false));
   }, [live, kind]);
 
   // Income and expense keep separate trees; switching clears any half-typed drafts.
@@ -86,7 +89,13 @@ export default function CategoriesAdmin() {
         </form>
       </details>
       {error && <p className="error" role="alert">{error}</p>}
-      {tree.map((c) => (
+      {loading ? (
+        <div className="category-loading" aria-busy="true">
+          <Skeleton label="Loading categories…" />
+          <span className="skeleton" aria-hidden="true" />
+          <span className="skeleton" aria-hidden="true" />
+        </div>
+      ) : tree.map((c) => (
         <details key={c.type} className={`card category category-disclosure${c.active ? '' : ' is-hidden'}`}>
           <summary>{c.type}{!c.active && ' (hidden)'}</summary>
           <section>

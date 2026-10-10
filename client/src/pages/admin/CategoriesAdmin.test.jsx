@@ -157,3 +157,18 @@ describe('removing', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('used by 3 expenses. Hide it instead');
   });
 });
+
+test('shows a loading animation while switching category trees', async () => {
+  let resolveIncome;
+  api.get.mockImplementation((_path, query) => (query && query.kind === 'income'
+    ? new Promise((r) => { resolveIncome = r; })
+    : Promise.resolve(tree)));
+  render(<CategoriesAdmin />);
+  await screen.findByRole('heading', { name: 'Recurrent' });
+  await userEvent.click(screen.getByRole('tab', { name: 'Income categories' }));
+  expect(screen.getByText('Loading categories…')).toBeInTheDocument();
+  expect(screen.queryByRole('heading', { name: 'Recurrent' })).toBeNull();
+  resolveIncome([{ type: 'Diagnostics', active: true, groups: [] }]);
+  expect(await screen.findByRole('heading', { name: 'Diagnostics' })).toBeInTheDocument();
+  expect(screen.queryByText('Loading categories…')).toBeNull();
+});
