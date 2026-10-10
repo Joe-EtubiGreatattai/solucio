@@ -68,9 +68,9 @@ export default function CategoriesAdmin() {
 
   return (
     <>
-      <div className="row tabs" role="tablist" aria-label="Category ledger" style={{ marginBottom: 10 }}>
-        <button type="button" role="tab" aria-selected={kind === 'expense'} className={kind === 'expense' ? '' : 'secondary'} onClick={() => chooseKind('expense')}>Expense categories</button>
-        <button type="button" role="tab" aria-selected={kind === 'income'} className={kind === 'income' ? '' : 'secondary'} onClick={() => chooseKind('income')}>Income categories</button>
+      <div className="ledger-switch" role="tablist" aria-label="Category ledger">
+        <button type="button" role="tab" aria-selected={kind === 'expense'} className={`ledger-tab ${kind === 'expense' ? 'active' : ''}`} onClick={() => chooseKind('expense')}>Expense categories</button>
+        <button type="button" role="tab" aria-selected={kind === 'income'} className={`ledger-tab ${kind === 'income' ? 'active' : ''}`} onClick={() => chooseKind('income')}>Income categories</button>
       </div>
       <p className="muted">
         Add the categories, groups and items your {noun} need. Something you hide disappears from new {noun};
