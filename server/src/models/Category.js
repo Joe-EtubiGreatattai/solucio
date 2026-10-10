@@ -9,6 +9,8 @@ const groupSchema = new mongoose.Schema(
 );
 const categorySchema = new mongoose.Schema(
   {
+    // Which ledger this category belongs to. Income and expense keep separate trees.
+    kind: { type: String, enum: ['expense', 'income'], default: 'expense', required: true },
     name: { type: String, required: true, trim: true },
     active: { type: Boolean, default: true },
     order: { type: Number, default: 0 },
@@ -16,6 +18,6 @@ const categorySchema = new mongoose.Schema(
   },
   { timestamps: true, optimisticConcurrency: true }
 );
-categorySchema.index({ name: 1 }, { unique: true, collation: { locale: 'en', strength: 2 } });
+categorySchema.index({ kind: 1, name: 1 }, { unique: true, collation: { locale: 'en', strength: 2 } });
 
 module.exports = mongoose.model('Category', categorySchema);

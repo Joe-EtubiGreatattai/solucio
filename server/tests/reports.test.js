@@ -106,3 +106,27 @@ describe('spending by category after the categories change', () => {
     expect(body.types[1].groups[0].items[0]).toMatchObject({ item: 'Phase 1', total: 30000 });
   });
 });
+
+describe('income by category', () => {
+  const { incomeByCategory } = require('../src/services/reports');
+  const { makeIncome } = require('./helpers');
+
+  test('groups income under the income tree and tracks uncategorized separately', async () => {
+    const { user } = await createUser('accountant');
+    const account = await makeAccount();
+    const ctx = { account, recordedBy: user };
+    await makeIncome({ ...ctx, amount: 300000, type: 'Diagnostics', group: 'Laboratory', item: null });
+    await makeIncome({ ...ctx, amount: 200000, type: 'Diagnostics', group: 'Radiology', item: 'X-ray' });
+    await makeIncome({ ...ctx, amount: 100000 }); // no category
+    await makeIncome({ ...ctx, amount: 50000, voided: true, voidReason: 'x', type: 'Pharmacy', group: 'Drug Sales' }); // void excluded
+
+    const r = await incomeByCategory('2026-01-01', '2026-12-31');
+    expect(r.grandTotal).toBe(500000); // categorized income only; excludes void and uncategorized
+    expect(r.uncategorized).toBe(100000);
+    const diagnostics = r.types.find((t) => t.type === 'Diagnostics');
+    expect(diagnostics.total).toBe(500000);
+    expect(diagnostics.groups.map((g) => g.group).sort()).toEqual(['Laboratory', 'Radiology']);
+    // an income-tree type, not an expense one
+    expect(r.types.some((t) => t.type === 'Recurrent')).toBe(false);
+  });
+});

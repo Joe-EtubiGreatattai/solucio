@@ -17,4 +17,32 @@ const DEFAULT_CATEGORIES = {
   },
 };
 
-module.exports = { DEFAULT_CATEGORIES };
+// Starter income categories for a clinic. Managed by the admin after the first run, like the expense list.
+const DEFAULT_INCOME_CATEGORIES = {
+  'Patient Services': {
+    Consultation: ['New patient', 'Follow-up', 'Specialist'],
+    Procedures: ['Minor', 'Major'],
+    Admission: ['Ward', 'Private room'],
+    'Antenatal & Delivery': [],
+  },
+  Diagnostics: {
+    Laboratory: [],
+    Radiology: ['X-ray', 'Ultrasound', 'Scan'],
+    'Other Tests': [],
+  },
+  Pharmacy: {
+    'Drug Sales': [],
+    Consumables: [],
+  },
+  'HMO & Insurance': {
+    'HMO Claims': [],
+    'Insurance Claims': [],
+  },
+  Other: {
+    'Medical Reports': [],
+    Ambulance: [],
+    Others: [],
+  },
+};
+
+module.exports = { DEFAULT_CATEGORIES, DEFAULT_INCOME_CATEGORIES };

@@ -39,10 +39,27 @@ test('shows every category, group and item, and marks what is hidden', async () 
   expect(within(screen.getByText('Nursing').closest('li')).queryByText('Hidden')).toBeNull();
 });
 
-test('explains that hiding keeps past expenses', async () => {
+test('explains that hiding keeps past records', async () => {
   render(<CategoriesAdmin />);
   await screen.findByRole('heading', { name: 'Recurrent' });
-  expect(screen.getByText(/past expenses keep/i)).toBeInTheDocument();
+  expect(screen.getByText(/past records keep/i)).toBeInTheDocument();
+});
+
+test('switches between expense and income category trees', async () => {
+  const incomeTree = [{ type: 'Diagnostics', active: true, groups: [{ name: 'Laboratory', active: true, items: [] }] }];
+  api.get.mockImplementation((_path, query) => Promise.resolve(query && query.kind === 'income' ? incomeTree : tree));
+  render(<CategoriesAdmin />);
+  await screen.findByRole('heading', { name: 'Recurrent' });
+
+  await userEvent.click(screen.getByRole('tab', { name: 'Income categories' }));
+  expect(await screen.findByRole('heading', { name: 'Diagnostics' })).toBeInTheDocument();
+  expect(screen.queryByRole('heading', { name: 'Recurrent' })).toBeNull();
+
+  // adding while on the income tab sends kind: income
+  api.post.mockResolvedValue(incomeTree);
+  await userEvent.type(screen.getByLabelText('New category'), 'Grants');
+  await userEvent.click(screen.getByRole('button', { name: 'Add category' }));
+  expect(api.post).toHaveBeenCalledWith('/categories/types', { name: 'Grants', kind: 'income' });
 });
 
 test('adds a category', async () => {
@@ -51,7 +68,7 @@ test('adds a category', async () => {
   render(<CategoriesAdmin />);
   await userEvent.type(await screen.findByLabelText('New category'), 'Research');
   await userEvent.click(screen.getByRole('button', { name: 'Add category' }));
-  expect(api.post).toHaveBeenCalledWith('/categories/types', { name: 'Research' });
+  expect(api.post).toHaveBeenCalledWith('/categories/types', { name: 'Research', kind: 'expense' });
   expect(await screen.findByRole('heading', { name: 'Research' })).toBeInTheDocument();
   expect(screen.getByLabelText('New category')).toHaveValue('');
 });
@@ -60,20 +77,20 @@ test('adds a group to a category', async () => {
   render(<CategoriesAdmin />);
   await userEvent.type(await screen.findByLabelText('New group in Recurrent'), 'Security');
   await userEvent.click(screen.getByRole('button', { name: 'Add group to Recurrent' }));
-  expect(api.post).toHaveBeenCalledWith('/categories/groups', { type: 'Recurrent', name: 'Security' });
+  expect(api.post).toHaveBeenCalledWith('/categories/groups', { type: 'Recurrent', name: 'Security', kind: 'expense' });
 });
 
 test('adds an item to a group', async () => {
   render(<CategoriesAdmin />);
   await userEvent.type(await screen.findByLabelText('New item in Staff Wages'), 'Bonus');
   await userEvent.click(screen.getByRole('button', { name: 'Add item to Staff Wages' }));
-  expect(api.post).toHaveBeenCalledWith('/categories/items', { type: 'Recurrent', group: 'Staff Wages', name: 'Bonus' });
+  expect(api.post).toHaveBeenCalledWith('/categories/items', { type: 'Recurrent', group: 'Staff Wages', name: 'Bonus', kind: 'expense' });
 });
 
 test('adding also works with the Enter key', async () => {
   render(<CategoriesAdmin />);
   await userEvent.type(await screen.findByLabelText('New item in Rents'), 'Office{enter}');
-  expect(api.post).toHaveBeenCalledWith('/categories/items', { type: 'Recurrent', group: 'Rents', name: 'Office' });
+  expect(api.post).toHaveBeenCalledWith('/categories/items', { type: 'Recurrent', group: 'Rents', name: 'Office', kind: 'expense' });
 });
 
 test('an empty name is refused before asking the server', async () => {
@@ -86,13 +103,13 @@ test('an empty name is refused before asking the server', async () => {
 test('hides and shows categories, groups and items', async () => {
   render(<CategoriesAdmin />);
   await userEvent.click(await screen.findByRole('button', { name: 'Hide item Nursing in Equipment' }));
-  expect(api.patch).toHaveBeenLastCalledWith('/categories/active', { type: 'Capital', group: 'Equipment', item: 'Nursing', active: false });
+  expect(api.patch).toHaveBeenLastCalledWith('/categories/active', { type: 'Capital', group: 'Equipment', item: 'Nursing', active: false, kind: 'expense' });
   await userEvent.click(screen.getByRole('button', { name: 'Show item Radiology in Equipment' }));
-  expect(api.patch).toHaveBeenLastCalledWith('/categories/active', { type: 'Capital', group: 'Equipment', item: 'Radiology', active: true });
+  expect(api.patch).toHaveBeenLastCalledWith('/categories/active', { type: 'Capital', group: 'Equipment', item: 'Radiology', active: true, kind: 'expense' });
   await userEvent.click(screen.getByRole('button', { name: 'Hide group Rents in Recurrent' }));
-  expect(api.patch).toHaveBeenLastCalledWith('/categories/active', { type: 'Recurrent', group: 'Rents', active: false });
+  expect(api.patch).toHaveBeenLastCalledWith('/categories/active', { type: 'Recurrent', group: 'Rents', active: false, kind: 'expense' });
   await userEvent.click(screen.getByRole('button', { name: 'Hide category Capital' }));
-  expect(api.patch).toHaveBeenLastCalledWith('/categories/active', { type: 'Capital', active: false });
+  expect(api.patch).toHaveBeenLastCalledWith('/categories/active', { type: 'Capital', active: false, kind: 'expense' });
 });
 
 test('shows the server\'s reason when something already exists', async () => {
@@ -118,7 +135,7 @@ describe('removing', () => {
     expect(api.post).not.toHaveBeenCalled();
     const confirm = screen.getByRole('button', { name: 'Confirm remove item Warehouse in Rents' });
     await userEvent.click(confirm);
-    expect(api.post).toHaveBeenCalledWith('/categories/remove', { type: 'Recurrent', group: 'Rents', item: 'Warehouse' });
+    expect(api.post).toHaveBeenCalledWith('/categories/remove', { type: 'Recurrent', group: 'Rents', item: 'Warehouse', kind: 'expense' });
     expect(confirm).toBeDisabled();
     expect(confirm).toHaveTextContent('Removing…');
     resolvePost(tree);

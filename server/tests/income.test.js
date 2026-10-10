@@ -119,3 +119,37 @@ test('there is no way to edit or delete income', async () => {
   expect((await request(app).patch(`/api/incomes/${created.body._id}`).set(auth(admin.token)).send({ amount: 1 })).status).toBe(404);
   expect((await request(app).delete(`/api/incomes/${created.body._id}`).set(auth(admin.token))).status).toBe(404);
 });
+
+describe('income categories', () => {
+  const inc = (token, o) => request(app).post('/api/incomes').set(auth(token)).send(body(o));
+
+  test('records income with a valid income category', async () => {
+    const res = await inc(cashier.token, { type: 'Diagnostics', group: 'Radiology', item: 'X-ray' });
+    expect(res.status).toBe(201);
+    expect(res.body).toMatchObject({ type: 'Diagnostics', group: 'Radiology', item: 'X-ray' });
+  });
+
+  test('category is optional: income saves fine without one', async () => {
+    const res = await inc(cashier.token, {});
+    expect(res.status).toBe(201);
+    expect(res.body.type).toBeNull();
+    expect(res.body.group).toBeNull();
+    expect(res.body.item).toBeNull();
+  });
+
+  test('a group with items requires one; an expense category is not a valid income category', async () => {
+    expect((await inc(cashier.token, { type: 'Diagnostics', group: 'Radiology' })).status).toBe(400); // Radiology has items
+    expect((await inc(cashier.token, { type: 'Recurrent', group: 'Staff Wages' })).status).toBe(400); // expense tree
+    expect((await inc(cashier.token, { type: 'Diagnostics', group: 'Laboratory' })).status).toBe(201); // Laboratory has no items
+  });
+
+  test('the list can be filtered by income category', async () => {
+    await inc(cashier.token, { type: 'Diagnostics', group: 'Laboratory' });
+    await inc(cashier.token, { type: 'Pharmacy', group: 'Drug Sales' });
+    const byType = await request(app).get('/api/incomes?type=Diagnostics').set(auth(cashier.token));
+    expect(byType.body.total).toBe(1);
+    expect(byType.body.items[0].group).toBe('Laboratory');
+    const byGroup = await request(app).get('/api/incomes?group=Drug Sales').set(auth(cashier.token));
+    expect(byGroup.body.total).toBe(1);
+  });
+});

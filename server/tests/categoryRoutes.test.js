@@ -91,9 +91,9 @@ describe('adding categories, groups and items', () => {
     await post(admin.token, 'items', { type: 'Research', group: 'Trials', name: 'Phase 1' });
     const logs = await AuditLog.find({ action: 'category.add' }).sort('createdAt');
     expect(logs.map((l) => l.details)).toEqual([
-      { level: 'category', path: ['Research'] },
-      { level: 'group', path: ['Research', 'Trials'] },
-      { level: 'item', path: ['Research', 'Trials', 'Phase 1'] },
+      { kind: 'expense', level: 'category', path: ['Research'] },
+      { kind: 'expense', level: 'group', path: ['Research', 'Trials'] },
+      { kind: 'expense', level: 'item', path: ['Research', 'Trials', 'Phase 1'] },
     ]);
   });
 });
@@ -135,7 +135,7 @@ describe('hiding and showing', () => {
   test('changes are audited', async () => {
     await active(admin.token, { type: 'Capital', group: 'Equipment', item: 'Nursing', active: false });
     const log = await AuditLog.findOne({ action: 'category.update' });
-    expect(log.details).toEqual({ path: ['Capital', 'Equipment', 'Nursing'], active: false });
+    expect(log.details).toEqual({ kind: 'expense', path: ['Capital', 'Equipment', 'Nursing'], active: false });
   });
 });
 

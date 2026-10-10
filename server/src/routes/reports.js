@@ -27,6 +27,11 @@ router.get('/spending-by-category', requirePermission('reports.view'), validate(
   res.json(await reports.spendingByCategory(from, to));
 }));
 
+router.get('/income-by-category', requirePermission('reports.view'), validate(rangeQuery, 'query'), asyncHandler(async (req, res) => {
+  const { from, to } = req.validated.query;
+  res.json(await reports.incomeByCategory(from, to));
+}));
+
 router.get('/account-balances', requirePermission('reports.view'), validate(balancesQuery, 'query'), asyncHandler(async (req, res) => {
   res.json(await reports.accountBalances(req.validated.query.asOf));
 }));

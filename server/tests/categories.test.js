@@ -24,7 +24,7 @@ test('seeding runs once: it never overwrites what an admin has added', async () 
   await Category.updateOne({ name: 'Recurrent' }, { $push: { groups: { name: 'Security', items: [] } } });
   await ensureDefaultCategories();
   await Promise.all([ensureDefaultCategories(), ensureDefaultCategories()]);
-  expect(await Category.countDocuments()).toBe(2);
+  expect(await Category.countDocuments({ kind: 'expense' })).toBe(2);
   expect((await getTree())[0].groups.map((g) => g.name)).toContain('Security');
 });
 

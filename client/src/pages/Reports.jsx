@@ -17,6 +17,7 @@ export default function Reports() {
   const { can } = useAuth();
   const [range, setRange] = useStoredState('solucio:report-range', rangeFor('month'));
   const [report, setReport] = useState(null);
+  const [income, setIncome] = useState(null);
   const [error, setError] = useState('');
   const [exportType, setExportType] = useState('summary');
   const [format, setFormat] = useState('xlsx');
@@ -25,14 +26,16 @@ export default function Reports() {
   useEffect(() => {
     if (!range.from || !range.to) return;
     let ignore = false;
-    api.get('/reports/spending-by-category', range)
-      .then((spending) => { if (!ignore) { setReport(spending); setError(''); } })
+    Promise.all([api.get('/reports/spending-by-category', range), api.get('/reports/income-by-category', range)])
+      .then(([spending, incomeCats]) => { if (!ignore) { setReport(spending); setIncome(incomeCats); setError(''); } })
       .catch((e) => { if (!ignore) setError(e.message); });
     return () => { ignore = true; };
   }, [range, live]);
 
   const chart = report ? report.types.flatMap((t) => t.groups.map((g) => ({ name: `${t.type}: ${g.group}`, amount: g.total, percent: g.percent }))) : [];
   const colours = ['#8964ee', '#b29af7', '#64c7ad', '#f2ad6e', '#ee7f98', '#6a91d9', '#d6c6fa'];
+  const incomeChart = income ? income.types.flatMap((t) => t.groups.map((g) => ({ name: `${t.type}: ${g.group}`, amount: g.total, percent: g.percent }))) : [];
+  const incomeColours = ['#2d8a59', '#64c7ad', '#8ed6b6', '#b29af7', '#6a91d9', '#f2ad6e', '#ee7f98'];
 
   const exportFile = async () => {
     setBusy(true);
@@ -103,6 +106,41 @@ export default function Reports() {
                 <span className="legend-value"><b>{formatNaira(item.amount)}</b><small>{item.percent}% of spending</small></span>
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      <h2>Income by category</h2>
+      {!income && !error && <div className="card report-skeleton"><Skeleton /><Skeleton /><Skeleton /></div>}
+      {income && income.grandTotal === 0 && income.uncategorized === 0 && <p>No income in this period.</p>}
+      {income && (income.grandTotal > 0 || income.uncategorized > 0) && (
+        <div className="card spending-visual">
+          <div className="pie-wrap">
+            <ResponsiveContainer width="100%" height={330}>
+              <PieChart>
+                <Pie data={incomeChart} dataKey="amount" nameKey="name" cx="50%" cy="50%" innerRadius={78} outerRadius={118} paddingAngle={3} stroke="none">
+                  {incomeChart.map((entry, index) => <Cell key={entry.name} fill={incomeColours[index % incomeColours.length]} />)}
+                </Pie>
+                <Tooltip formatter={(value) => formatNaira(value)} />
+              </PieChart>
+            </ResponsiveContainer>
+            <div className="pie-total"><span>Categorized income</span><b>{formatNaira(income.grandTotal)}</b></div>
+          </div>
+          <div className="pie-legend" aria-label="Income breakdown">
+            {incomeChart.map((item, index) => (
+              <div className="pie-legend-item" key={item.name}>
+                <span className="legend-dot" style={{ background: incomeColours[index % incomeColours.length] }} aria-hidden="true" />
+                <span className="legend-name">{item.name}</span>
+                <span className="legend-value"><b>{formatNaira(item.amount)}</b><small>{item.percent}% of income</small></span>
+              </div>
+            ))}
+            {income.uncategorized > 0 && (
+              <div className="pie-legend-item">
+                <span className="legend-dot" style={{ background: '#c5d0d9' }} aria-hidden="true" />
+                <span className="legend-name">Uncategorized</span>
+                <span className="legend-value"><b>{formatNaira(income.uncategorized)}</b><small>no category chosen</small></span>
+              </div>
+            )}
           </div>
         </div>
       )}

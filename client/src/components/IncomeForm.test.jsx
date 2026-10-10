@@ -49,3 +49,31 @@ test('keeps the typed amount and shows the server error when saving fails', asyn
   expect(await screen.findByText('Choose an active account')).toBeInTheDocument();
   expect(screen.getByLabelText('Amount (₦)')).toHaveValue('100');
 });
+
+const incomeCats = [{ type: 'Diagnostics', groups: [{ name: 'Laboratory', items: [] }, { name: 'Radiology', items: ['X-ray'] }] }];
+
+test('income category is optional — records fine without one', async () => {
+  const onSubmit = vi.fn().mockResolvedValue();
+  render(<IncomeForm accounts={accounts} categories={incomeCats} onSubmit={onSubmit} />);
+  await userEvent.type(screen.getByLabelText('Amount (₦)'), '500');
+  await userEvent.selectOptions(screen.getByLabelText('Account'), 'a1');
+  await userEvent.click(screen.getByRole('button', { name: 'Record payment' }));
+  expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ amount: 50000, accountId: 'a1' }));
+  const payload = onSubmit.mock.calls[0][0];
+  expect(payload).not.toHaveProperty('type');
+  expect(payload).not.toHaveProperty('group');
+});
+
+test('a chosen income category is validated and sent', async () => {
+  const onSubmit = vi.fn().mockResolvedValue();
+  render(<IncomeForm accounts={accounts} categories={incomeCats} onSubmit={onSubmit} />);
+  await userEvent.type(screen.getByLabelText('Amount (₦)'), '500');
+  await userEvent.selectOptions(screen.getByLabelText('Account'), 'a1');
+  await userEvent.selectOptions(screen.getByLabelText('Category type'), 'Diagnostics');
+  await userEvent.selectOptions(screen.getByLabelText('Group'), 'Radiology');
+  await userEvent.click(screen.getByRole('button', { name: 'Record payment' }));
+  expect(screen.getByText(/Choose an item/)).toBeInTheDocument();
+  await userEvent.selectOptions(screen.getByLabelText('Item'), 'X-ray');
+  await userEvent.click(screen.getByRole('button', { name: 'Record payment' }));
+  expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ type: 'Diagnostics', group: 'Radiology', item: 'X-ray' }));
+});

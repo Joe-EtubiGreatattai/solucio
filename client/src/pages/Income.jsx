@@ -3,6 +3,7 @@ import { api } from '../api';
 import { useLiveRefresh } from '../realtime/RealtimeProvider';
 import { useAuth } from '../auth/AuthContext';
 import { useAccounts } from '../hooks/useAccounts';
+import { useCategories } from '../hooks/useCategories';
 import IncomeForm from '../components/IncomeForm';
 import VoidDialog from '../components/VoidDialog';
 import PaymentSuccess from '../components/PaymentSuccess';
@@ -26,6 +27,8 @@ export default function Income() {
   const canRecord = can('income.record');
   const canVoid = can('income.void');
   const { accounts, error: accountsError } = useAccounts();
+  const { categories } = useCategories('income');
+  const categoryPath = (i) => [i.type, i.group, i.item].filter(Boolean).join(' › ');
   const [filters, setFilters] = useStoredState('solucio:income-filters', { from: '', to: '', status: 'all', method: '', accountId: '' });
   const [data, setData] = useState({ items: [], total: 0 });
   const [loaded, setLoaded] = useState(false);
@@ -80,7 +83,7 @@ export default function Income() {
         <details className="workspace-disclosure" open={!canView}>
           <summary>Record payment</summary>
           <div role="group" aria-label="Record payment">
-            <IncomeForm accounts={accounts} onSubmit={record} />
+            <IncomeForm accounts={accounts} categories={categories} onSubmit={record} />
           </div>
         </details>
       )}
@@ -135,15 +138,16 @@ export default function Income() {
           <TableWrap label="Income entries">
           <table>
             <thead>
-              <tr><th>Date</th><th>Receipt</th><th>Method</th><th>Account</th><th className="num">Amount</th><th>Recorded by</th><th>Status</th><th><span className="sr-only">Actions</span></th></tr>
+              <tr><th>Date</th><th>Receipt</th><th>Method</th><th>Account</th><th>Category</th><th className="num">Amount</th><th>Recorded by</th><th>Status</th><th><span className="sr-only">Actions</span></th></tr>
             </thead>
-            {!loaded ? <TableSkeleton columns={8} label="Loading…" /> : <tbody>
+            {!loaded ? <TableSkeleton columns={9} label="Loading…" /> : <tbody>
               {data.items.map((i) => (
                 <tr key={i._id} className={i.voided ? 'void' : ''}>
                   <td>{formatDate(i.date)}</td>
                   <td>{i.receiptNumber}</td>
                   <td>{METHOD[i.method]}</td>
                   <td>{accountLabel(i.account)}</td>
+                  <td>{categoryPath(i) || '—'}</td>
                   <td className="num">{formatNaira(i.amount)}</td>
                   <td>{i.recordedBy && i.recordedBy.name}</td>
                   <td className="keep">{i.voided ? `Void: ${i.voidReason}` : 'Active'}</td>
@@ -156,7 +160,7 @@ export default function Income() {
                 </tr>
               ))}
               {loaded && data.items.length === 0 && (
-                <tr><td colSpan={8}>{filtered ? 'No payments match these filters.' : (canRecord ? 'No payments yet. Record the first one above.' : 'No payments have been recorded yet.')}</td></tr>
+                <tr><td colSpan={9}>{filtered ? 'No payments match these filters.' : (canRecord ? 'No payments yet. Record the first one above.' : 'No payments have been recorded yet.')}</td></tr>
               )}
             </tbody>}
           </table>

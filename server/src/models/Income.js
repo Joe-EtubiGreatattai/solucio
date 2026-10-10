@@ -7,6 +7,10 @@ const incomeSchema = new Schema(
     date: { type: Date, required: true },
     method: { type: String, enum: ['transfer', 'pos', 'cash'], required: true },
     account: { type: Schema.Types.ObjectId, ref: 'Account', required: true },
+    // Optional income category (income tree). Left null for quick receipts.
+    type: { type: String, default: null },
+    group: { type: String, default: null },
+    item: { type: String, default: null },
     receiptNumber: { type: String, required: true, unique: true },
     recordedBy: { type: Schema.Types.ObjectId, ref: 'User', required: true },
     voided: { type: Boolean, default: false },

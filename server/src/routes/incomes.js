@@ -10,6 +10,7 @@ const { parseLagosDate } = require('../utils/dates');
 const { recordDate, amount, objectId, voidBody, listQueryShape } = require('../utils/schemas');
 const { dateFilter, statusFilter } = require('../utils/filters');
 const { nextReceiptNumber } = require('../services/receiptNumber');
+const { assertValidCategory } = require('../services/categories');
 const { voidRecord } = require('../services/voidRecord');
 const { logAudit } = require('../services/audit');
 const { renderReceipt } = require('../services/receiptPdf');
@@ -19,13 +20,23 @@ const createSchema = z.object({
   date: recordDate,
   method: z.enum(['transfer', 'pos', 'cash'], { errorMap: () => ({ message: 'Choose transfer, POS or cash' }) }),
   accountId: objectId,
+  type: z.string().trim().optional(),
+  group: z.string().trim().optional(),
+  item: z.string().trim().nullish(),
 });
-const listQuery = z.object({ ...listQueryShape, method: z.enum(['transfer', 'pos', 'cash']).optional() });
+const listQuery = z.object({
+  ...listQueryShape,
+  method: z.enum(['transfer', 'pos', 'cash']).optional(),
+  type: z.string().optional(),
+  group: z.string().optional(),
+  item: z.string().optional(),
+});
 
 router.use(authenticate);
 
 router.post('/', requirePermission('income.record'), validate(createSchema), asyncHandler(async (req, res) => {
-  const { amount: amt, date, method, accountId } = req.validated.body;
+  const { amount: amt, date, method, accountId, type, group, item } = req.validated.body;
+  if (type) await assertValidCategory(type, group, item, 'income');
   const account = await Account.findById(accountId);
   if (!account || !account.active) {
     throw new AppError(400, 'Account not found or inactive', { accountId: 'Choose an active account' });
@@ -33,6 +44,7 @@ router.post('/', requirePermission('income.record'), validate(createSchema), asy
   const receiptNumber = await nextReceiptNumber(date.slice(0, 4));
   const income = await Income.create({
     amount: amt, date: parseLagosDate(date), method, account: account._id, receiptNumber, recordedBy: req.user._id,
+    type: type || null, group: group || null, item: item || null,
   });
   await logAudit({ actor: req.user._id, action: 'income.create', targetModel: 'Income', targetId: income._id, details: { receiptNumber, amount: amt } });
   res.status(201).json(income);
@@ -43,6 +55,7 @@ router.get('/', requirePermission('income.view'), validate(listQuery, 'query'), 
   const filter = { ...dateFilter(q.from, q.to), ...statusFilter(q.status) };
   if (q.accountId) filter.account = q.accountId;
   if (q.method) filter.method = q.method;
+  for (const k of ['type', 'group', 'item']) if (q[k]) filter[k] = q[k];
   const [items, total] = await Promise.all([
     Income.find(filter)
       .sort({ date: -1, createdAt: -1 })

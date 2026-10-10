@@ -11,10 +11,15 @@ export default function CategoriesAdmin() {
   const [error, setError] = useState('');
   const [confirming, setConfirming] = useState(null);
   const [removing, setRemoving] = useState(null);
+  const [kind, setKind] = useState('expense');
+  const noun = kind === 'income' ? 'income' : 'expenses';
 
   useEffect(() => {
-    api.get('/categories/all').then(setTree).catch((e) => setError(e.message));
-  }, [live]);
+    api.get('/categories/all', { kind }).then(setTree).catch((e) => setError(e.message));
+  }, [live, kind]);
+
+  // Income and expense keep separate trees; switching clears any half-typed drafts.
+  const chooseKind = (next) => { setKind(next); setDrafts({}); setConfirming(null); setError(''); setFieldError({}); };
 
   const setDraft = (key, value) => setDrafts((d) => ({ ...d, [key]: value }));
   // Every change returns the whole tree, so the screen always shows exactly what the server has.
@@ -32,13 +37,13 @@ export default function CategoriesAdmin() {
     const name = (drafts[key] || '').trim();
     if (!name) return setFieldError({ [key]: 'Enter a name' });
     setFieldError({});
-    return run(() => api.post(path, { ...body, name }), key);
+    return run(() => api.post(path, { ...body, name, kind }), key);
   };
-  const toggle = (body, active) => run(() => api.patch('/categories/active', { ...body, active }));
+  const toggle = (body, active) => run(() => api.patch('/categories/active', { ...body, active, kind }));
   // Removing is permanent, so it takes a second click; the server refuses anything an expense still uses.
   const remove = async (label, body) => {
     setRemoving(label);
-    await run(() => api.post('/categories/remove', body));
+    await run(() => api.post('/categories/remove', { ...body, kind }));
     setRemoving(null);
     setConfirming(null);
   };
@@ -63,9 +68,13 @@ export default function CategoriesAdmin() {
 
   return (
     <>
+      <div className="row tabs" role="tablist" aria-label="Category ledger" style={{ marginBottom: 10 }}>
+        <button type="button" role="tab" aria-selected={kind === 'expense'} className={kind === 'expense' ? '' : 'secondary'} onClick={() => chooseKind('expense')}>Expense categories</button>
+        <button type="button" role="tab" aria-selected={kind === 'income'} className={kind === 'income' ? '' : 'secondary'} onClick={() => chooseKind('income')}>Income categories</button>
+      </div>
       <p className="muted">
-        Add the categories, groups and items your expenses need. Something you hide disappears from new expenses;
-        past expenses keep it, so nothing is ever lost. Remove is only for things no expense uses yet, like a typo.
+        Add the categories, groups and items your {noun} need. Something you hide disappears from new {noun};
+        past records keep it, so nothing is ever lost. Remove is only for things nothing uses yet, like a typo.
       </p>
       <details className="workspace-disclosure">
         <summary>Add category</summary>

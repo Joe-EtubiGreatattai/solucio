@@ -50,6 +50,37 @@ async function spendingByCategory(from, to) {
   return { grandTotal, types };
 }
 
+// Income grouped under the income category tree, with everything uncategorized kept in its own bucket.
+async function incomeByCategory(from, to) {
+  const rows = await Income.aggregate([
+    { $match: rangeMatch(from, to) },
+    { $group: { _id: { type: '$type', group: '$group', item: '$item' }, total: { $sum: '$amount' } } },
+  ]);
+  const uncategorized = rows.filter((r) => !r._id.type).reduce((s, r) => s + r.total, 0);
+  const totals = new Map(rows.filter((r) => r._id.type).map((r) => [`${r._id.type}|${r._id.group || ''}|${r._id.item || ''}`, r.total]));
+  const grandTotal = [...totals.values()].reduce((s, n) => s + n, 0);
+  const pct = (n) => (grandTotal ? Math.round((n / grandTotal) * 1000) / 10 : 0);
+
+  const types = [];
+  for (const { type, groups } of await getTree({ kind: 'income', includeInactive: true })) {
+    const groupOut = [];
+    for (const g of groups) {
+      const untagged = totals.get(`${type}|${g.name}|`) || 0;
+      const items = g.items
+        .map(({ name: item }) => ({ item, total: totals.get(`${type}|${g.name}|${item}`) || 0 }))
+        .filter((i) => i.total > 0);
+      if (g.items.length > 0 && untagged > 0) items.push({ item: 'No item', total: untagged });
+      const groupTotal = items.reduce((s, i) => s + i.total, 0) + (g.items.length === 0 ? untagged : 0);
+      if (groupTotal > 0) {
+        groupOut.push({ group: g.name, total: groupTotal, percent: pct(groupTotal), items: items.map((i) => ({ ...i, percent: pct(i.total) })) });
+      }
+    }
+    const typeTotal = groupOut.reduce((s, g) => s + g.total, 0);
+    if (typeTotal > 0) types.push({ type, total: typeTotal, percent: pct(typeTotal), groups: groupOut });
+  }
+  return { grandTotal, uncategorized, types };
+}
+
 async function accountBalances(asOf) {
   const match = { voided: false };
   if (asOf) match.date = { $lt: dayAfter(parseLagosDate(asOf)) };
@@ -176,4 +207,4 @@ async function cashFlow(from, to) {
   };
 }
 
-module.exports = { summary, spendingByCategory, accountBalances, cashFlow };
+module.exports = { summary, spendingByCategory, incomeByCategory, accountBalances, cashFlow };
