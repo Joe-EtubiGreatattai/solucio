@@ -196,16 +196,26 @@ router.post('/:id/approve', requirePermission('statements.approve'), asyncHandle
   ]);
   const blockers = [];
   for (const transaction of included) {
-    if (!transaction.type) continue; // income may be left uncategorized
     const ledger = transaction.direction === 'income' ? 'income' : 'expense';
+    const addBlocker = (action, create) => blockers.push({
+      transactionId: String(transaction._id), narration: transaction.narration, kind: ledger,
+      path: [transaction.type, transaction.group, transaction.item].filter(Boolean).join(' › '),
+      action, ...(create && { create }),
+    });
+    if (!transaction.type) {
+      // Income may be left uncategorized, but an expense can't be posted without a category
+      // (the Expense model requires a type and group), so flag it instead of crashing mid-import.
+      if (ledger === 'expense') addBlocker('choose');
+      continue;
+    }
     const issue = classifyAgainstTree(ledger === 'income' ? incomeTree : expenseTree, transaction.type, transaction.group, transaction.item);
     if (issue) {
-      blockers.push({
-        transactionId: String(transaction._id), narration: transaction.narration, kind: ledger,
-        path: [transaction.type, transaction.group, transaction.item].filter(Boolean).join(' › '),
-        action: issue.action, ...(issue.create && { create: issue.create }),
-      });
+      addBlocker(issue.action, issue.create);
+      continue;
     }
+    // An expense also needs a group even when its type has no sub-groups, or posting would
+    // fail after earlier rows were already written.
+    if (ledger === 'expense' && !transaction.group) addBlocker('choose');
   }
   if (blockers.length) {
     const n = blockers.length;

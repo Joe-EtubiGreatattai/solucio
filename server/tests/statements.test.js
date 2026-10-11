@@ -139,6 +139,27 @@ describe('approving posts real records', () => {
     expect(await Income.countDocuments()).toBe(0);
     expect((await Statement.findById(statement.id)).status).toBe('review');
   });
+
+  test('an included expense with no category blocks approval instead of crashing, and posts nothing', async () => {
+    const statement = await makeStatement([
+      expenseRow({ type: null, group: null, item: null }),
+      incomeRow(),
+    ]);
+    const res = await request(app).post(`/api/statements/${statement.id}/approve`).set(auth(admin.token));
+    expect(res.status).toBe(409);
+    expect(res.body.blockers).toHaveLength(1);
+    expect(res.body.blockers[0]).toMatchObject({ kind: 'expense', action: 'choose' });
+    expect(await Expense.countDocuments()).toBe(0);
+    expect(await Income.countDocuments()).toBe(0);
+    expect((await Statement.findById(statement.id)).status).toBe('review');
+  });
+
+  test('an included income with no category still approves (income may stay uncategorized)', async () => {
+    const statement = await makeStatement([incomeRow({ type: null, group: null, item: null })]);
+    const res = await request(app).post(`/api/statements/${statement.id}/approve`).set(auth(admin.token));
+    expect(res.status).toBe(200);
+    expect(await Income.countDocuments()).toBe(1);
+  });
 });
 
 describe('choosing which rows to import', () => {
