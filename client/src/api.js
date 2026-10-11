@@ -5,10 +5,11 @@ export const getToken = () => localStorage.getItem(TOKEN_KEY);
 export const setToken = (t) => (t ? localStorage.setItem(TOKEN_KEY, t) : localStorage.removeItem(TOKEN_KEY));
 
 export class ApiError extends Error {
-  constructor(status, message, fields) {
+  constructor(status, message, fields, data) {
     super(message);
     this.status = status;
     this.fields = fields || {};
+    this.data = data || {};
   }
 }
 
@@ -32,7 +33,7 @@ async function request(method, path, { body, query, raw } = {}) {
   if (!res.ok) {
     let data = {};
     try { data = await res.json(); } catch { /* not JSON */ }
-    throw new ApiError(res.status, data.message || 'Request failed', data.fields);
+    throw new ApiError(res.status, data.message || 'Request failed', data.fields, data);
   }
   return raw ? res.blob() : res.json();
 }
@@ -56,7 +57,7 @@ export const api = {
     if (!res.ok) {
       let data = {};
       try { data = await res.json(); } catch { /* not JSON */ }
-      throw new ApiError(res.status, data.message || 'Upload failed', data.fields);
+      throw new ApiError(res.status, data.message || 'Upload failed', data.fields, data);
     }
     return res.json();
   },

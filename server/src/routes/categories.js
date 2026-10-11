@@ -5,6 +5,7 @@ const validate = require('../middleware/validate');
 const asyncHandler = require('../utils/asyncHandler');
 const { logAudit } = require('../services/audit');
 const categories = require('../services/categories');
+const Category = require('../models/Category');
 
 const name = z.string().trim().min(1, 'Enter a name').max(60, 'Keep the name under 60 characters');
 const parent = z.string().trim().min(1, 'Choose where this goes');
@@ -67,6 +68,22 @@ router.post('/remove', ...manage, validate(removeBody), asyncHandler(async (req,
     details: { kind: b.kind, level: b.item ? 'item' : b.group ? 'group' : 'category', path: [b.type, b.group, b.item].filter(Boolean) },
   });
   res.json(await categories.getTree({ kind: b.kind, includeInactive: true }));
+}));
+
+const ensurePathBody = z
+  .object({ kind, type: parent, group: parent.optional(), item: parent.optional() })
+  .refine((d) => !d.item || d.group, { message: 'Choose the group the item belongs to', path: ['group'] });
+
+// Create any missing level of a category path in one call (used by the "create missing category" button).
+router.post('/ensure-path', ...manage, validate(ensurePathBody), asyncHandler(async (req, res) => {
+  const b = req.validated.body;
+  const tree = await categories.ensurePath(b);
+  const created = await Category.findOne({ kind: b.kind, name: b.type }).lean();
+  await logAudit({
+    actor: req.user._id, action: 'category.add', targetModel: 'Category', targetId: created._id,
+    details: { kind: b.kind, level: 'path', path: [b.type, b.group, b.item].filter(Boolean) },
+  });
+  res.json(tree);
 }));
 
 const renameBody = z

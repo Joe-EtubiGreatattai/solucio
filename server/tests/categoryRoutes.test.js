@@ -198,6 +198,31 @@ describe('removing categories, groups and items', () => {
   });
 });
 
+describe('ensure-path (one-click category creation)', () => {
+  const ensure = (token, body) => request(app).post('/api/categories/ensure-path').set(auth(token)).send(body);
+
+  test('creates every missing level of a path and is idempotent', async () => {
+    const res = await ensure(admin.token, { type: 'Recurrent', group: 'New Group', item: 'New Item' });
+    expect(res.status).toBe(200);
+    const g = res.body.find((c) => c.type === 'Recurrent').groups.find((x) => x.name === 'New Group');
+    expect(g.items.map((i) => i.name)).toContain('New Item');
+    // running again changes nothing and does not error
+    expect((await ensure(admin.token, { type: 'Recurrent', group: 'New Group', item: 'New Item' })).status).toBe(200);
+    // the created path validates for a new expense
+    expect((await expense(admin.token, { type: 'Recurrent', group: 'New Group', item: 'New Item' })).status).toBe(201);
+  });
+
+  test('creates a brand new income type and group', async () => {
+    const res = await ensure(admin.token, { kind: 'income', type: 'Grants', group: 'Research' });
+    expect(res.body.find((c) => c.type === 'Grants').groups.map((g) => g.name)).toContain('Research');
+  });
+
+  test('only category managers may use it', async () => {
+    const cashier = await createUser('cashier');
+    expect((await ensure(cashier.token, { type: 'X' })).status).toBe(403);
+  });
+});
+
 describe('renaming categories, groups and items', () => {
   const Expense = require('../src/models/Expense');
   const Income = require('../src/models/Income');

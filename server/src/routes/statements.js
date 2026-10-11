@@ -14,7 +14,7 @@ const { extractTransactions } = require('../services/statementParser');
 const { categorizeTransactions, loadCategorizerContext, payeeOf, isBankCharge } = require('../services/statementCategorizer');
 const { logAudit } = require('../services/audit');
 const { nextReceiptNumber } = require('../services/receiptNumber');
-const { assertValidCategory } = require('../services/categories');
+const { classifyAgainstTree, getTree } = require('../services/categories');
 
 const router = express.Router();
 const listQuery = z.object({ accountId: objectId.optional() });
@@ -190,14 +190,26 @@ router.post('/:id/approve', requirePermission('statements.approve'), asyncHandle
 
   // Check every included expense against the current category tree before posting anything,
   // so a half-imported statement can never happen.
+  const [expenseTree, incomeTree] = await Promise.all([
+    getTree({ kind: 'expense', includeInactive: true }),
+    getTree({ kind: 'income', includeInactive: true }),
+  ]);
+  const blockers = [];
   for (const transaction of included) {
     if (!transaction.type) continue; // income may be left uncategorized
-    try {
-      await assertValidCategory(transaction.type, transaction.group, transaction.item, transaction.direction === 'income' ? 'income' : 'expense');
-    } catch (err) {
-      if (!(err instanceof AppError)) throw err;
-      throw new AppError(409, `"${transaction.narration}" has an incomplete or outdated category. Open it, choose a valid category, then approve.`);
+    const ledger = transaction.direction === 'income' ? 'income' : 'expense';
+    const issue = classifyAgainstTree(ledger === 'income' ? incomeTree : expenseTree, transaction.type, transaction.group, transaction.item);
+    if (issue) {
+      blockers.push({
+        transactionId: String(transaction._id), narration: transaction.narration, kind: ledger,
+        path: [transaction.type, transaction.group, transaction.item].filter(Boolean).join(' › '),
+        action: issue.action, ...(issue.create && { create: issue.create }),
+      });
     }
+  }
+  if (blockers.length) {
+    const n = blockers.length;
+    throw new AppError(409, `${n} transaction${n === 1 ? '' : 's'} use a category that isn't fully set up. Create the missing categories, or choose one on each, then approve.`, undefined, { blockers });
   }
 
   const account = await Account.findById(statement.account);

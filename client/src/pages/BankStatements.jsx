@@ -42,6 +42,8 @@ export default function BankStatements() {
   const [reviewOnly, setReviewOnly] = useState(false);
   const [bulkIncludeScope, setBulkIncludeScope] = useState('');
   const [approving, setApproving] = useState(false);
+  const [approveBlockers, setApproveBlockers] = useState(null);
+  const [fixing, setFixing] = useState(false);
   const [rechecking, setRechecking] = useState(false);
   // Holds the id of the statement awaiting a second click, so switching statements never carries it over.
   const [confirmingDelete, setConfirmingDelete] = useState('');
@@ -191,11 +193,31 @@ export default function BankStatements() {
       setNotice('Statement approved. Its included transactions are now in your records.');
       setError('');
     } catch (err) {
-      setError(err.message);
+      // Approval can be held up by rows whose category isn't set up; offer to fix them in a dialog.
+      if (err.data && Array.isArray(err.data.blockers) && err.data.blockers.length) setApproveBlockers(err.data.blockers);
+      else setError(err.message);
     } finally {
       setApproving(false);
     }
   };
+
+  // One click: create every missing category the held-up rows need, refresh the trees, then approve again.
+  const createMissingAndApprove = async (creates) => {
+    setFixing(true);
+    try {
+      for (const c of creates) await api.post('/categories/ensure-path', { kind: c.kind, ...c.create });
+      const [exp, inc] = await Promise.all([api.get('/categories'), api.get('/categories', { kind: 'income' })]);
+      setCategories(Array.isArray(exp) ? exp : []);
+      setIncomeCategories(Array.isArray(inc) ? inc : []);
+      setApproveBlockers(null);
+      await approve();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setFixing(false);
+    }
+  };
+  const openBlocker = (blocker) => { setReviewOnly(false); setSelectedTransactionId(blocker.transactionId); setApproveBlockers(null); };
 
   const selectedType = categories.find((entry) => entry.type === transaction?.type) || categories[0];
   const selectedGroup = selectedType?.groups.find((entry) => entry.name === transaction?.group) || selectedType?.groups[0];
@@ -319,6 +341,34 @@ export default function BankStatements() {
             </>
           )}
       </section>
+      {approveBlockers && (() => {
+        const creates = [...new Map(approveBlockers.filter((b) => b.action === 'create').map((b) => [`${b.kind}|${b.path}`, b])).values()];
+        const choices = approveBlockers.filter((b) => b.action === 'choose');
+        return (
+          <div className="modal">
+            <form className="card" role="dialog" aria-modal="true" aria-labelledby="fix-cat-title" onSubmit={(e) => e.preventDefault()}>
+              <h3 id="fix-cat-title">Some categories aren&apos;t set up</h3>
+              <p>These transactions use a category that isn&apos;t ready yet. Fix them, then approving will continue.</p>
+              {creates.length > 0 && (
+                <div className="fix-group">
+                  <p><b>Missing — create in one click:</b></p>
+                  <ul className="blocker-list">{creates.map((b) => <li key={`${b.kind}|${b.path}`}><em className={b.kind === 'income' ? 'income' : 'expense'}>{b.kind}</em> {b.path}</li>)}</ul>
+                </div>
+              )}
+              {choices.length > 0 && (
+                <div className="fix-group">
+                  <p><b>Need a sub-category chosen:</b></p>
+                  <ul className="blocker-list">{choices.map((b) => <li key={b.transactionId}>{b.path} — <button type="button" className="link" onClick={() => openBlocker(b)}>Open this transaction</button></li>)}</ul>
+                </div>
+              )}
+              <div className="row modal-actions">
+                <button type="button" className="secondary" onClick={() => setApproveBlockers(null)}>Close</button>
+                {creates.length > 0 && <button type="button" disabled={fixing} onClick={() => createMissingAndApprove(creates)}>{fixing ? 'Creating…' : `Create ${creates.length} categor${creates.length === 1 ? 'y' : 'ies'} & approve`}</button>}
+              </div>
+            </form>
+          </div>
+        );
+      })()}
     </>
   );
 }

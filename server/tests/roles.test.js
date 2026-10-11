@@ -47,6 +47,7 @@ const ROUTES = [
   ['patch', '/api/categories/active', ADMIN],
   ['post', '/api/categories/remove', ADMIN],
   ['post', '/api/categories/rename', ADMIN],
+  ['post', '/api/categories/ensure-path', ADMIN],
   ['get', '/api/roles', ADMIN],
   ['post', '/api/roles', ADMIN],
   ['patch', '/api/roles/cashier', ADMIN],

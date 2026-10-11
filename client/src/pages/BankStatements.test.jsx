@@ -221,3 +221,36 @@ describe('income categorization in the review panel', () => {
     expect(api.patch).toHaveBeenCalledWith('/statements/s1/transactions/t2', expect.objectContaining({ type: 'Diagnostics', group: 'Laboratory' }));
   });
 });
+
+describe('fixing categories that block approval', () => {
+  const blockerError = (blockers) => Object.assign(new Error('not set up'), { data: { blockers } });
+
+  test('a missing category offers one-click create, then re-approves', async () => {
+    api.post.mockImplementation((path) => (path.endsWith('/approve')
+      ? Promise.reject(blockerError([{ transactionId: 't1', narration: 'IBEDC PREPAID METER', kind: 'expense', path: 'Recurrent › New Group', action: 'create', create: { type: 'Recurrent', group: 'New Group' } }]))
+      : Promise.resolve(statement)));
+    renderPage();
+    await waitForLoaded();
+    await userEvent.click(screen.getByRole('button', { name: 'Approve statement' }));
+    expect(await screen.findByText(/aren.t set up/i)).toBeInTheDocument();
+
+    // now make ensure-path + a retried approve succeed
+    api.post.mockImplementation((path) => (path.endsWith('/approve') ? Promise.resolve(statement) : Promise.resolve([])));
+    await userEvent.click(screen.getByRole('button', { name: /Create 1 category & approve/ }));
+    expect(api.post).toHaveBeenCalledWith('/categories/ensure-path', { kind: 'expense', type: 'Recurrent', group: 'New Group' });
+    await waitFor(() => expect(screen.queryByText(/aren.t set up/i)).toBeNull());
+  });
+
+  test('an incomplete category is shown to open rather than create', async () => {
+    api.post.mockImplementation((path) => (path.endsWith('/approve')
+      ? Promise.reject(blockerError([{ transactionId: 't1', narration: 'NIP TFR FROM PATIENT', kind: 'income', path: 'Diagnostics', action: 'choose' }]))
+      : Promise.resolve(statement)));
+    renderPage();
+    await waitForLoaded();
+    await userEvent.click(screen.getByRole('button', { name: 'Approve statement' }));
+    expect(await screen.findByText(/Need a sub-category chosen/i)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Create .* & approve/ })).toBeNull();
+    await userEvent.click(screen.getByRole('button', { name: 'Open this transaction' }));
+    expect(screen.queryByText(/aren.t set up/i)).toBeNull();
+  });
+});

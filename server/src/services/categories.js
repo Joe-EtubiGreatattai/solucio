@@ -64,6 +64,62 @@ async function assertValidCategory(type, group, item, kind = 'expense') {
   if (!items.some((i) => i.name === item)) throw bad();
 }
 
+// Like assertValidCategory, but instead of throwing it says WHY a category is unusable: 'create' when a
+// level of the path is missing (so it can be created), or 'choose' when the path exists but stops short of a
+// required sub-level or hits a hidden node (so a person must pick a different one). Returns null when valid.
+async function categoryIssue(kind, type, group, item) {
+  const ok = (node) => node.active !== false;
+  const create = { type, ...(group && { group }), ...(item && { item }) };
+  const category = await Category.findOne({ kind, name: type }).lean();
+  if (!category) return { action: 'create', create };
+  if (!ok(category)) return { action: 'choose' };
+  if (group) {
+    const g = category.groups.find((x) => x.name === group);
+    if (!g) return { action: 'create', create };
+    if (!ok(g)) return { action: 'choose' };
+    if (item) {
+      const i = g.items.find((x) => x.name === item);
+      if (!i) return { action: 'create', create };
+      if (!ok(i)) return { action: 'choose' };
+      return null;
+    }
+    return g.items.some(ok) ? { action: 'choose' } : null;
+  }
+  return category.groups.some(ok) ? { action: 'choose' } : null;
+}
+
+// Sync version of categoryIssue that checks against an already-loaded getTree() result, so approving a big
+// statement does not run one query per row.
+function classifyAgainstTree(tree, type, group, item) {
+  const ok = (node) => node.active !== false;
+  const create = { type, ...(group && { group }), ...(item && { item }) };
+  const category = tree.find((x) => x.type === type);
+  if (!category) return { action: 'create', create };
+  if (!ok(category)) return { action: 'choose' };
+  if (group) {
+    const g = category.groups.find((x) => x.name === group);
+    if (!g) return { action: 'create', create };
+    if (!ok(g)) return { action: 'choose' };
+    if (item) {
+      const i = g.items.find((x) => x.name === item);
+      if (!i) return { action: 'create', create };
+      if (!ok(i)) return { action: 'choose' };
+      return null;
+    }
+    return g.items.some(ok) ? { action: 'choose' } : null;
+  }
+  return category.groups.some(ok) ? { action: 'choose' } : null;
+}
+
+// Create whatever levels of a type > group > item path are missing. Idempotent: existing levels are left as is.
+async function ensurePath({ kind = 'expense', type, group, item }) {
+  const skipDup = async (fn) => { try { await fn(); } catch (e) { if (!(e instanceof AppError) || e.status !== 409) throw e; } };
+  await skipDup(() => addType(type, kind));
+  if (group) await skipDup(() => addGroup(type, group, kind));
+  if (item) await skipDup(() => addItem(type, group, item, kind));
+  return getTree({ kind, includeInactive: true });
+}
+
 async function load(type, kind = 'expense') {
   const category = await Category.findOne({ kind, name: type });
   if (!category) throw new AppError(404, 'Category not found');
@@ -210,4 +266,4 @@ async function renameNode({ kind = 'expense', type, group, item, name }) {
   return category;
 }
 
-module.exports = { ensureDefaultCategories, getTree, publicTree, assertValidCategory, addType, addGroup, addItem, setActive, removeNode, renameNode };
+module.exports = { ensureDefaultCategories, getTree, publicTree, assertValidCategory, categoryIssue, classifyAgainstTree, ensurePath, addType, addGroup, addItem, setActive, removeNode, renameNode };

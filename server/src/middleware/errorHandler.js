@@ -14,7 +14,7 @@ function errorHandler(err, req, res, next) { // eslint-disable-line no-unused-va
     }
     return res.status(400).json({ message: 'Please fix the highlighted fields', fields });
   }
-  if (err instanceof AppError) return res.status(err.status).json({ message: err.message, fields: err.fields });
+  if (err instanceof AppError) return res.status(err.status).json({ message: err.message, fields: err.fields, ...(err.data || {}) });
   if (err.type === 'entity.parse.failed') return res.status(400).json({ message: 'Invalid JSON' });
   if (err.name === 'CastError') return res.status(400).json({ message: 'Invalid id' });
   console.error(err);
