@@ -137,6 +137,102 @@ describe('learning from reviewers', () => {
   });
 });
 
+describe('learning purpose words that generalize to new payees', () => {
+  const { buildKeywordMemory } = require('../src/services/statementCategorizer');
+  const paidFor = (payee, memo, group, item = null) => ({
+    narration: `NIP CR/MOB/${payee}/GTB /${memo}`, direction: 'expense', type: 'Recurrent', group, item, categorySource: 'reviewer',
+  });
+
+  test('a purpose word you keep choosing is suggested for a brand-new payee', () => {
+    const statements = [{ status: 'approved', transactions: [
+      paidFor('JOSIAH ABANIKANDA', 'physiotherapy session', 'Outsource Services', 'Specialist Consultation'),
+      paidFor('DR ADEYEMI WILLIAM', 'physiotherapy for patient', 'Outsource Services', 'Specialist Consultation'),
+      paidFor('UGOCHUKWU DARLINGTON', 'physiotherapy review', 'Outsource Services', 'Specialist Consultation'),
+    ] }];
+    const keywordMemory = buildKeywordMemory(statements, 'expense');
+    expect(one('NIP CR/MOB/SOMEONE BRAND NEW/UBA /physiotherapy today', 'expense', { keywordMemory })).toMatchObject({
+      group: 'Outsource Services', item: 'Specialist Consultation', categorySource: 'learned', confidence: 'medium',
+    });
+  });
+
+  test('a word tied to just one payee is not generalized', () => {
+    const statements = [{ status: 'approved', transactions: [
+      paidFor('ZAINAB SHAIBU', 'zainabretainer', 'Charity'),
+      paidFor('ZAINAB SHAIBU', 'zainabretainer', 'Charity'),
+      paidFor('ZAINAB SHAIBU', 'zainabretainer', 'Charity'),
+    ] }];
+    const keywordMemory = buildKeywordMemory(statements, 'expense');
+    expect(one('NIP CR/MOB/DIFFERENT PERSON/UBA /zainabretainer now', 'expense', { keywordMemory }).categorySource).not.toBe('learned');
+  });
+
+  test('a one-off purpose word (seen once) is not learned', () => {
+    const statements = [{ status: 'approved', transactions: [
+      paidFor('ADA ONE', 'kinesiology', 'Outsource Services', 'Specialist Consultation'),
+    ] }];
+    const keywordMemory = buildKeywordMemory(statements, 'expense');
+    expect(one('NIP CR/MOB/NEW PAYEE/UBA /kinesiology', 'expense', { keywordMemory }).categorySource).not.toBe('learned');
+  });
+
+  test('a built-in keyword rule still wins over a learned word', () => {
+    // The clinic mislearned "DRUGS" as Rents, but the built-in Drugs rule must still apply.
+    const statements = [{ status: 'approved', transactions: [
+      paidFor('PAYEE A', 'drugs supply', 'Rents'),
+      paidFor('PAYEE B', 'drugs supply', 'Rents'),
+      paidFor('PAYEE C', 'drugs supply', 'Rents'),
+    ] }];
+    const keywordMemory = buildKeywordMemory(statements, 'expense');
+    expect(one('NIP CR/MOB/NEW PHARM/UBA /drugs supply', 'expense', { keywordMemory })).toMatchObject({
+      group: 'Hospital Consumables', item: 'Drugs',
+    });
+  });
+
+  test('an exact payee match still beats a learned word', () => {
+    const statements = [{ status: 'approved', transactions: [
+      paidFor('STEADY VENDOR', 'physiotherapy', 'Outsource Services', 'Specialist Consultation'),
+      paidFor('OTHER VENDOR', 'physiotherapy', 'Outsource Services', 'Specialist Consultation'),
+      paidFor('STEADY VENDOR', 'misc', 'Rents'),
+    ] }];
+    const memory = buildKeywordMemory ? require('../src/services/statementCategorizer').buildMemory(statements, 'expense') : null;
+    const keywordMemory = buildKeywordMemory(statements, 'expense');
+    expect(one('NIP CR/MOB/STEADY VENDOR/UBA /physiotherapy', 'expense', { memory, keywordMemory }).categorySource).toBe('memory');
+  });
+});
+
+describe('fuzzy payee matching', () => {
+  const reviewed = (narration, group) => ({ narration, direction: 'expense', type: 'Recurrent', group, item: null, categorySource: 'reviewer' });
+
+  test('recalls a payee despite extra name tokens', () => {
+    const memory = buildMemory([{ status: 'approved', transactions: [reviewed('MOBILE TRF TO PAY/ /GIFT ENYO OJO', 'Staff Wages')] }]);
+    expect(one('MOBILE TRF TO PAY/ /GIFT ENYO OJO JOE ETUBI', 'expense', { memory })).toMatchObject({
+      group: 'Staff Wages', categorySource: 'memory', confidence: 'medium', reason: expect.stringMatching(/similar payee/i),
+    });
+  });
+
+  test('does not fuzzy-match on a single shared common name', () => {
+    const memory = buildMemory([{ status: 'approved', transactions: [reviewed('MOBILE TRF TO PAY/ /JOHN ADAMS', 'Staff Wages')] }]);
+    expect(one('MOBILE TRF TO PAY/ /JOHN SMITH', 'expense', { memory }).categorySource).not.toBe('memory');
+  });
+});
+
+describe('weighting recent and hand-reviewed decisions', () => {
+  const asExpense = (narration, group, extra) => ({ narration, direction: 'expense', type: 'Recurrent', group, item: null, ...extra });
+
+  test('one hand-reviewed choice outweighs several auto-approved ones', () => {
+    const statements = [{ status: 'approved', transactions: [
+      asExpense('MOBILE TRF TO PAY/ ADA OKON', 'Charity', { categorySource: 'reviewer' }),
+      asExpense('MOBILE TRF TO PAY/ ADA OKON', 'Staff Wages', { categorySource: 'rule', included: true }),
+      asExpense('MOBILE TRF TO PAY/ ADA OKON', 'Staff Wages', { categorySource: 'rule', included: true }),
+    ] }];
+    expect(one('MOBILE TRF TO PAY/ ADA OKON', 'expense', { memory: buildMemory(statements, 'expense') })).toMatchObject({ group: 'Charity' });
+  });
+
+  test('a more recent decision outweighs an equally-sourced older one', () => {
+    const older = { status: 'approved', approvedAt: new Date('2026-01-01'), transactions: [asExpense('MOBILE TRF TO PAY/ ADA OKON', 'Charity', { categorySource: 'reviewer' })] };
+    const newer = { status: 'approved', approvedAt: new Date('2026-06-01'), transactions: [asExpense('MOBILE TRF TO PAY/ ADA OKON', 'Staff Wages', { categorySource: 'reviewer' })] };
+    expect(one('MOBILE TRF TO PAY/ ADA OKON', 'expense', { memory: buildMemory([older, newer], 'expense') })).toMatchObject({ group: 'Staff Wages' });
+  });
+});
+
 describe('income', () => {
   test('payment processor and HMO settlements are high confidence', () => {
     expect(one('PAYSTACK/KOBO WITHDRAWAL DORMCOMNG', 'income')).toMatchObject({ confidence: 'high' });
