@@ -133,7 +133,7 @@ describe('approving posts real records', () => {
     ]);
     const res = await request(app).post(`/api/statements/${statement.id}/approve`).set(auth(admin.token));
     expect(res.status).toBe(409);
-    expect(res.body.message).toMatch(/category that no longer exists/i);
+    expect(res.body.message).toMatch(/incomplete or outdated category/i);
     expect(await Expense.countDocuments()).toBe(0);
     expect(await Income.countDocuments()).toBe(0);
     expect((await Statement.findById(statement.id)).status).toBe('review');

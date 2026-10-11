@@ -196,7 +196,7 @@ router.post('/:id/approve', requirePermission('statements.approve'), asyncHandle
       await assertValidCategory(transaction.type, transaction.group, transaction.item, transaction.direction === 'income' ? 'income' : 'expense');
     } catch (err) {
       if (!(err instanceof AppError)) throw err;
-      throw new AppError(409, `"${transaction.narration}" has a category that no longer exists. Fix it before approving.`);
+      throw new AppError(409, `"${transaction.narration}" has an incomplete or outdated category. Open it, choose a valid category, then approve.`);
     }
   }
 
