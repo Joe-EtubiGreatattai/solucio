@@ -173,16 +173,31 @@ describe('learning purpose words that generalize to new payees', () => {
     expect(one('NIP CR/MOB/NEW PAYEE/UBA /kinesiology', 'expense', { keywordMemory }).categorySource).not.toBe('learned');
   });
 
-  test('a built-in keyword rule still wins over a learned word', () => {
-    // The clinic mislearned "DRUGS" as Rents, but the built-in Drugs rule must still apply.
+  test('a learned word takes precedence over a built-in keyword rule', () => {
+    // The clinic consistently files "drugs supply" under Rents (e.g. a standing supplier arrangement);
+    // that learned choice now wins over the built-in Drugs rule.
     const statements = [{ status: 'approved', transactions: [
-      paidFor('PAYEE A', 'drugs supply', 'Rents'),
-      paidFor('PAYEE B', 'drugs supply', 'Rents'),
-      paidFor('PAYEE C', 'drugs supply', 'Rents'),
+      paidFor('ALPHA SUPPLIES', 'drugs supply', 'Rents'),
+      paidFor('BETA TRADERS', 'drugs supply', 'Rents'),
+      paidFor('GAMMA VENTURES', 'drugs supply', 'Rents'),
     ] }];
     const keywordMemory = buildKeywordMemory(statements, 'expense');
-    expect(one('NIP CR/MOB/NEW PHARM/UBA /drugs supply', 'expense', { keywordMemory })).toMatchObject({
-      group: 'Hospital Consumables', item: 'Drugs',
+    expect(one('NIP CR/MOB/DELTA MERCHANTS/UBA /drugs supply', 'expense', { keywordMemory })).toMatchObject({
+      group: 'Rents', categorySource: 'learned', confidence: 'medium',
+    });
+  });
+
+  test('a strongly unanimous learned word (5+ payees, one category) is high confidence', () => {
+    const statements = [{ status: 'approved', transactions: [
+      paidFor('ADA OKON', 'physiotherapy', 'Outsource Services', 'Specialist Consultation'),
+      paidFor('BELLO MUSA', 'physiotherapy', 'Outsource Services', 'Specialist Consultation'),
+      paidFor('CHIKA EZE', 'physiotherapy', 'Outsource Services', 'Specialist Consultation'),
+      paidFor('DELE ABIOLA', 'physiotherapy', 'Outsource Services', 'Specialist Consultation'),
+      paidFor('EMEKA OBI', 'physiotherapy', 'Outsource Services', 'Specialist Consultation'),
+    ] }];
+    const keywordMemory = buildKeywordMemory(statements, 'expense');
+    expect(one('NIP CR/MOB/FEMI ADE/UBA /physiotherapy', 'expense', { keywordMemory })).toMatchObject({
+      group: 'Outsource Services', item: 'Specialist Consultation', categorySource: 'learned', confidence: 'high',
     });
   });
 

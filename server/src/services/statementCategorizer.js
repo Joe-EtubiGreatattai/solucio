@@ -294,6 +294,9 @@ function buildKeywordMemory(statements, direction = 'expense') {
 const KEYWORD_MIN_ROWS = 3;
 const KEYWORD_MIN_PAYEES = 2;
 const KEYWORD_DOMINANCE = 0.8;
+// A learned word is trusted enough to auto-include (high confidence) only when every past decision
+// agreed and it was seen across this many distinct payees; otherwise it comes in for a quick review.
+const KEYWORD_HIGH_PAYEES = 5;
 function recallKeyword(keywordMemory, narration, payee, resolve) {
   if (!keywordMemory || !keywordMemory.size) return null;
   let best = null;
@@ -306,11 +309,12 @@ function recallKeyword(keywordMemory, narration, payee, resolve) {
     if (top.total < KEYWORD_MIN_ROWS || top.weight / totalWeight < KEYWORD_DOMINANCE) continue;
     const target = resolve(top);
     if (!target || !target.exact) continue;
-    if (!best || top.count > best.top.count) best = { target, token, top };
+    const strong = ranked.length === 1 && entry.payees.size >= KEYWORD_HIGH_PAYEES;
+    if (!best || top.count > best.top.count) best = { target, token, top, strong };
   }
   if (!best) return null;
   return {
-    ...best.target, confidence: 'medium', categorySource: 'learned',
+    ...best.target, confidence: best.strong ? 'high' : 'medium', categorySource: 'learned',
     reason: `Learned from past statements: "${best.token.toLowerCase()}" is usually ${label(best.target)}`,
   };
 }
@@ -362,6 +366,10 @@ function categorizeExpense(t, ctx) {
   const remembered = fromMemory(ctx, narration);
   if (remembered) return remembered;
 
+  // Learned purpose words take precedence over the built-in keyword rules below.
+  const learned = recallKeyword(keywordMemory, narration, payee, resolve);
+  if (learned) return learned;
+
   const text = spaced(narration);
   const hits = [];
   for (const rule of RULES) {
@@ -388,10 +396,6 @@ function categorizeExpense(t, ctx) {
     return { type: named.type, group: named.group, item: named.item, confidence: 'medium', categorySource: 'rule', reason: `Mentions "${named.name}"` };
   }
 
-  // No built-in rule fit; see whether a purpose word here is one the clinic has consistently categorized.
-  const learned = recallKeyword(keywordMemory, narration, payee, resolve);
-  if (learned) return learned;
-
   if (isOwner(narration, ownerName)) {
     return { ...blank, confidence: 'needs-review', categorySource: 'rule', reason: 'Looks like a transfer to the account holder\'s own account, which is usually not an expense. Leave it out or choose a category.' };
   }
@@ -411,12 +415,13 @@ function categorizeIncome(t, ctx) {
   const remembered = fromMemory(ctx, narration);
   if (remembered) return remembered;
 
-  const named = names.find((entry) => spaced(narration).includes(` ${entry.phrase} `));
-  if (named) return { type: named.type, group: named.group, item: named.item, confidence: 'medium', categorySource: 'rule', reason: `Mentions "${named.name}"` };
-
-  // A purpose word the clinic has consistently put under one income category.
+  // A purpose word the clinic has consistently put under one income category takes precedence
+  // over the built-in name match and the generic income flags below.
   const learned = recallKeyword(keywordMemory, narration, payee, resolve);
   if (learned) return learned;
+
+  const named = names.find((entry) => spaced(narration).includes(` ${entry.phrase} `));
+  if (named) return { type: named.type, group: named.group, item: named.item, confidence: 'medium', categorySource: 'rule', reason: `Mentions "${named.name}"` };
 
   // Otherwise flag what kind of income it looks like; a category can still be chosen (it is optional).
   if (MEDICAL_BILL.test(narration)) return result('high', 'Payment for medical bills');
