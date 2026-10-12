@@ -347,18 +347,24 @@ export default function BankStatements() {
         return (
           <div className="modal">
             <form className="card" role="dialog" aria-modal="true" aria-labelledby="fix-cat-title" onSubmit={(e) => e.preventDefault()}>
-              <h3 id="fix-cat-title">Some categories aren&apos;t set up</h3>
-              <p>These transactions use a category that isn&apos;t ready yet. Fix them, then approving will continue.</p>
+              <h3 id="fix-cat-title">A few rows still need a category</h3>
+              <p>Approving is paused until every row below has a category. Fix them here, then approve again.</p>
               {creates.length > 0 && (
                 <div className="fix-group">
-                  <p><b>Missing — create in one click:</b></p>
+                  <p><b>These categories don&apos;t exist yet — create and approve:</b></p>
                   <ul className="blocker-list">{creates.map((b) => <li key={`${b.kind}|${b.path}`}><em className={b.kind === 'income' ? 'income' : 'expense'}>{b.kind}</em> {b.path}</li>)}</ul>
                 </div>
               )}
               {choices.length > 0 && (
                 <div className="fix-group">
-                  <p><b>Need a sub-category chosen:</b></p>
-                  <ul className="blocker-list">{choices.map((b) => <li key={b.transactionId}>{b.path} — <button type="button" className="link" onClick={() => openBlocker(b)}>Open this transaction</button></li>)}</ul>
+                  <p><b>Open each of these rows and pick a category:</b></p>
+                  <ul className="blocker-list">{choices.map((b) => (
+                    <li key={b.transactionId}>
+                      {b.narration || '(no description)'}
+                      {b.path ? <span className="muted"> — currently {b.path}</span> : null}{' '}
+                      <button type="button" className="link" onClick={() => openBlocker(b)}>Open this transaction</button>
+                    </li>
+                  ))}</ul>
                 </div>
               )}
               <div className="row modal-actions">

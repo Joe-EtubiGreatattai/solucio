@@ -1,4 +1,4 @@
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import BankStatements from './BankStatements';
 import { api } from '../api';
@@ -232,13 +232,13 @@ describe('fixing categories that block approval', () => {
     renderPage();
     await waitForLoaded();
     await userEvent.click(screen.getByRole('button', { name: 'Approve statement' }));
-    expect(await screen.findByText(/aren.t set up/i)).toBeInTheDocument();
+    expect(await screen.findByText(/still need a category/i)).toBeInTheDocument();
 
     // now make ensure-path + a retried approve succeed
     api.post.mockImplementation((path) => (path.endsWith('/approve') ? Promise.resolve(statement) : Promise.resolve([])));
     await userEvent.click(screen.getByRole('button', { name: /Create 1 category & approve/ }));
     expect(api.post).toHaveBeenCalledWith('/categories/ensure-path', { kind: 'expense', type: 'Recurrent', group: 'New Group' });
-    await waitFor(() => expect(screen.queryByText(/aren.t set up/i)).toBeNull());
+    await waitFor(() => expect(screen.queryByText(/still need a category/i)).toBeNull());
   });
 
   test('an incomplete category is shown to open rather than create', async () => {
@@ -248,9 +248,11 @@ describe('fixing categories that block approval', () => {
     renderPage();
     await waitForLoaded();
     await userEvent.click(screen.getByRole('button', { name: 'Approve statement' }));
-    expect(await screen.findByText(/Need a sub-category chosen/i)).toBeInTheDocument();
+    expect(await screen.findByText(/pick a category/i)).toBeInTheDocument();
+    // the row's description is shown inside the modal, not just an empty path
+    expect(within(screen.getByRole('dialog')).getByText('NIP TFR FROM PATIENT', { exact: false })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Create .* & approve/ })).toBeNull();
     await userEvent.click(screen.getByRole('button', { name: 'Open this transaction' }));
-    expect(screen.queryByText(/aren.t set up/i)).toBeNull();
+    expect(screen.queryByText(/still need a category/i)).toBeNull();
   });
 });
