@@ -195,7 +195,7 @@ export default function Income() {
             </tbody>}
           </table>
           </TableWrap>
-          <p>{data.total} entries</p>
+          {loaded && <p>{data.total} {data.total === 1 ? 'entry' : 'entries'}</p>}
         </div>
         </>
       ) : (

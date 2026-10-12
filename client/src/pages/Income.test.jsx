@@ -60,9 +60,13 @@ test('shows Loading before the first response, then an empty state that says wha
   renderIncome();
   expect(await screen.findByText('Loading…')).toBeInTheDocument();
   expect(screen.queryByText(/No payments yet/)).toBeNull();
+  // the entry count must not flash "0 entries" while the data is still loading
+  const countLine = (_, el) => el?.tagName === 'P' && /\bentr(y|ies)\b/.test(el.textContent.trim());
+  expect(screen.queryByText(countLine)).toBeNull();
   resolveList({ items: [], total: 0 });
   expect(await screen.findByText(/No payments yet/)).toBeInTheDocument();
   expect(screen.queryByText('Loading…')).toBeNull();
+  expect(screen.getByText(countLine)).toHaveTextContent('0 entries');
 });
 
 test('row actions say which entry they act on', async () => {
