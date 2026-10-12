@@ -47,6 +47,27 @@ export default function Income() {
   }, [filters, canView, live]);
   useEffect(load, [load]);
 
+  // A saved filter can point at an account or category that no longer exists (e.g. recreated data).
+  // The dropdown then reads "All" but the stale value is still sent, so the list comes back empty.
+  // Drop any such value once the options have loaded so the page heals itself.
+  useEffect(() => {
+    setFilters((f) => {
+      const next = { ...f };
+      if (accounts.length && f.accountId && !accounts.some((a) => a._id === f.accountId)) next.accountId = '';
+      if (categories.length && f.type) {
+        const t = categories.find((c) => c.type === f.type);
+        if (!t) { next.type = ''; next.group = ''; next.item = ''; }
+        else {
+          const g = f.group && (t.groups || []).find((x) => x.name === f.group);
+          if (f.group && !g) { next.group = ''; next.item = ''; }
+          else if (g && f.item && !(g.items || []).includes(f.item)) next.item = '';
+        }
+      }
+      const same = next.accountId === f.accountId && next.type === f.type && next.group === f.group && next.item === f.item;
+      return same ? f : next;
+    });
+  }, [accounts, categories]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const record = async (payload) => {
     const income = await api.post('/incomes', payload);
     setNotice(income);

@@ -69,6 +69,21 @@ test('shows Loading before the first response, then an empty state that says wha
   expect(screen.getByText(countLine)).toHaveTextContent('0 entries');
 });
 
+test('a saved account filter that no longer exists is dropped, so the list is not silently empty', async () => {
+  localStorage.setItem('solucio:income-filters', JSON.stringify({ from: '', to: '', status: 'all', method: '', accountId: 'deleted-account', type: '', group: '', item: '' }));
+  const row = { _id: 'i5', receiptNumber: 'RCP-2026-0009', amount: 50000, method: 'transfer', date: '2026-01-31T00:00:00.000Z', account: { name: 'SOLUCIO CLINIC', type: 'bank', bankName: 'ZENITH', accountNumber: '1015149588' }, recordedBy: { name: 'System' }, voided: false };
+  api.get.mockImplementation((path, query) => {
+    if (path === '/accounts') return Promise.resolve(accounts);
+    if (path === '/incomes') return Promise.resolve(query && query.accountId ? { items: [], total: 0 } : { items: [row], total: 1 });
+    return Promise.resolve({ items: [], total: 0 });
+  });
+  renderIncome();
+  // once the accounts load, the dead account id is cleared and the records appear
+  expect(await screen.findByText('RCP-2026-0009')).toBeInTheDocument();
+  await waitFor(() => expect(api.get).toHaveBeenCalledWith('/incomes', expect.objectContaining({ accountId: '' })));
+  localStorage.removeItem('solucio:income-filters');
+});
+
 test('row actions say which entry they act on', async () => {
   const row = { _id: 'i9', receiptNumber: 'RCP-2026-0042', amount: 150000, method: 'pos', date: '2026-09-20T23:00:00.000Z', account: { name: 'Main Operations', type: 'cash' }, recordedBy: { name: 'Chioma' }, voided: false };
   api.get.mockImplementation((path) => Promise.resolve(path === '/accounts' ? accounts : { items: [row], total: 1 }));

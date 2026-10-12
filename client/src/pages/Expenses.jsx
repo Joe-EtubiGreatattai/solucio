@@ -40,6 +40,24 @@ export default function Expenses() {
   }, [filters, canView, live]);
   useEffect(load, [load]);
 
+  // Drop a saved category filter that points at a type/group/item that no longer exists, so the list
+  // doesn't silently come back empty while the dropdowns still read "All".
+  useEffect(() => {
+    setFilters((f) => {
+      if (!categories.length || !f.type) return f;
+      const next = { ...f };
+      const t = categories.find((c) => c.type === f.type);
+      if (!t) { next.type = ''; next.group = ''; next.item = ''; }
+      else {
+        const g = f.group && (t.groups || []).find((x) => x.name === f.group);
+        if (f.group && !g) { next.group = ''; next.item = ''; }
+        else if (g && f.item && !(g.items || []).includes(f.item)) next.item = '';
+      }
+      const same = next.type === f.type && next.group === f.group && next.item === f.item;
+      return same ? f : next;
+    });
+  }, [categories]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const record = async (payload) => {
     await api.post('/expenses', payload);
     load();
