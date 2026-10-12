@@ -334,7 +334,18 @@ export default function BankStatements() {
                       {transaction.type && selectedIncomeGroup?.items?.length > 0 && <label className="field"><span>Item</span><select value={transaction.item || ''} onChange={(event) => saveTransaction({ type: selectedIncomeType?.type, group: selectedIncomeGroup?.name, item: event.target.value })}><option value="">Choose item</option>{selectedIncomeGroup.items.map((entry) => <option key={entry} value={entry}>{entry}</option>)}</select></label>}
                     </>}
                     <label className="check"><input type="checkbox" checked={isIncluded(transaction)} onChange={() => toggleInclude(transaction)} /><span>Import this transaction</span></label>
-                    <button type="button" disabled={markingReviewed} onClick={async () => { setMarkingReviewed(true); try { await saveTransaction({ confidence: 'high' }); } finally { setMarkingReviewed(false); } }}>{markingReviewed ? 'Saving…' : 'Mark reviewed'}</button>
+                    <button type="button" disabled={markingReviewed} onClick={async () => {
+                      setMarkingReviewed(true);
+                      try {
+                        // Confirm the category that is actually shown. The expense Type/Group selects fall
+                        // back to the first option when nothing is stored, so persist those too — otherwise
+                        // the row would stay type/group-null and keep being flagged at approval.
+                        const changes = transaction.direction === 'expense'
+                          ? { type: selectedType?.type || null, group: selectedGroup?.name || null, item: (selectedGroup?.items || []).includes(transaction.item) ? transaction.item : null, confidence: 'high' }
+                          : { confidence: 'high' };
+                        await saveTransaction(changes);
+                      } finally { setMarkingReviewed(false); }
+                    }}>{markingReviewed ? 'Saving…' : 'Mark reviewed'}</button>
                     <div className="review-navigation"><button type="button" className="secondary" disabled={reviewIndex <= 0} onClick={() => setSelectedTransactionId(visibleTransactions[reviewIndex - 1]._id)}>Previous</button><button type="button" className="secondary" disabled={reviewIndex >= visibleTransactions.length - 1} onClick={() => setSelectedTransactionId(visibleTransactions[reviewIndex + 1]._id)}>Next</button></div>
                   </div> : <span className="approved-lock">This statement is locked</span>}
                 </aside>}

@@ -81,6 +81,25 @@ test('the Mark reviewed button shows a saving state while the change is in fligh
   expect(await screen.findByRole('button', { name: 'Mark reviewed' })).toBeEnabled();
 });
 
+test('Mark reviewed on an uncategorised expense saves the shown type and group, not just confidence', async () => {
+  const uncat = { _id: 't3', date: '2026-07-15', narration: 'DANIEL OKAFOR TEST TUBES', amount: 50000, direction: 'expense', type: null, group: null, item: null, confidence: 'needs-review', included: true };
+  const st = { ...statement, transactions: [uncat] };
+  api.get.mockImplementation((path, query) => {
+    if (path === '/accounts') return Promise.resolve([account]);
+    if (path === '/categories') return Promise.resolve(query && query.kind === 'income' ? incomeCategories : categories);
+    if (path === '/statements') return Promise.resolve([st]);
+    return Promise.resolve([]);
+  });
+  api.patch.mockResolvedValue(withTransactions([{ ...uncat, type: 'Recurrent', group: 'Servicing & Maintenance', confidence: 'high' }]));
+  renderPage();
+  await waitForLoaded();
+  await userEvent.click(screen.getAllByText('DANIEL OKAFOR TEST TUBES')[0]);
+  await userEvent.click(screen.getByRole('button', { name: 'Mark reviewed' }));
+  expect(api.patch).toHaveBeenCalledWith('/statements/s1/transactions/t3', expect.objectContaining({
+    type: 'Recurrent', group: 'Servicing & Maintenance', confidence: 'high',
+  }));
+});
+
 test('a transaction can be excluded and re-included from the table', async () => {
   api.patch.mockResolvedValue(withTransactions([{ ...expenseTx, included: false }, incomeTx]));
   renderPage();
