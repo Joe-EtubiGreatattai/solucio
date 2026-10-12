@@ -314,13 +314,38 @@ describe('income categories on import', () => {
     expect(await Income.countDocuments()).toBe(0);
   });
 
-  test('a row whose category exists but needs a sub-choice is flagged to choose, not create', async () => {
-    // Diagnostics (income) has groups, so a row with type only needs a group chosen.
+  test('income stopping at a type that has groups still imports at that level', async () => {
+    // Diagnostics (income) has groups, but a row is not forced to drill down; it imports as-is.
     const statement = await makeStatement([incomeRow({ type: 'Diagnostics', group: null, item: null, confidence: 'high' })]);
     const res = await request(app).post(`/api/statements/${statement.id}/approve`).set(auth(admin.token));
+    expect(res.status).toBe(200);
+    const income = await Income.findOne({});
+    expect(income).toMatchObject({ type: 'Diagnostics', group: null, item: null });
+  });
+
+  test('an expense stopping at a group that has sub-items still imports at the group level', async () => {
+    // Hospital Consumables has sub-items, but the row is not forced to pick one.
+    const statement = await makeStatement([expenseRow({ type: 'Recurrent', group: 'Hospital Consumables', item: null, confidence: 'high' })]);
+    const res = await request(app).post(`/api/statements/${statement.id}/approve`).set(auth(admin.token));
+    expect(res.status).toBe(200);
+    const expense = await Expense.findOne({});
+    expect(expense).toMatchObject({ type: 'Recurrent', group: 'Hospital Consumables', item: null });
+  });
+
+  test('an expense with a type but no group imports at the type level', async () => {
+    const statement = await makeStatement([expenseRow({ type: 'Recurrent', group: null, item: null, confidence: 'high' })]);
+    const res = await request(app).post(`/api/statements/${statement.id}/approve`).set(auth(admin.token));
+    expect(res.status).toBe(200);
+    const expense = await Expense.findOne({});
+    expect(expense).toMatchObject({ type: 'Recurrent', group: null, item: null });
+  });
+
+  test('an expense with no type at all still blocks (it cannot be posted uncategorized)', async () => {
+    const statement = await makeStatement([expenseRow({ type: null, group: null, item: null, confidence: 'high' })]);
+    const res = await request(app).post(`/api/statements/${statement.id}/approve`).set(auth(admin.token));
     expect(res.status).toBe(409);
-    expect(res.body.blockers[0]).toMatchObject({ action: 'choose', kind: 'income' });
-    expect(res.body.blockers[0].create).toBeUndefined();
+    expect(res.body.blockers[0]).toMatchObject({ kind: 'expense', action: 'choose' });
+    expect(await Expense.countDocuments()).toBe(0);
   });
 
   test('confirming an income category spreads to other income rows from the same payee', async () => {

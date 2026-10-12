@@ -29,7 +29,6 @@ test('leaf groups take no item and store null', async () => {
 test('invalid category paths are rejected', async () => {
   for (const o of [
     { item: 'Nope' },
-    { item: undefined },
     { group: 'Staff Wages', item: 'Bonus' },
     { type: 'Capital' },
     { type: 'Other' },
@@ -38,6 +37,18 @@ test('invalid category paths are rejected', async () => {
     expect(res.status).toBe(400);
     expect(res.body.fields.category).toBeDefined();
   }
+});
+
+test('a group with sub-items can be used without choosing one', async () => {
+  const res = await post(accountant.token, { item: undefined }); // Recurrent > Hospital Consumables, no item
+  expect(res.status).toBe(201);
+  expect(res.body).toMatchObject({ group: 'Hospital Consumables', item: null });
+});
+
+test('an expense can be recorded with only a type (no group)', async () => {
+  const res = await post(accountant.token, { group: undefined, item: undefined });
+  expect(res.status).toBe(201);
+  expect(res.body).toMatchObject({ type: 'Recurrent', group: null, item: null });
 });
 
 test('cashiers cannot use expense routes', async () => {

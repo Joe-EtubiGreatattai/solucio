@@ -25,7 +25,7 @@ async function spendingByCategory(from, to) {
     { $match: rangeMatch(from, to) },
     { $group: { _id: { type: '$type', group: '$group', item: '$item' }, total: { $sum: '$amount' } } },
   ]);
-  const totals = new Map(rows.map((r) => [`${r._id.type}|${r._id.group}|${r._id.item || ''}`, r.total]));
+  const totals = new Map(rows.map((r) => [`${r._id.type}|${r._id.group || ''}|${r._id.item || ''}`, r.total]));
   const grandTotal = rows.reduce((s, r) => s + r.total, 0);
   const pct = (n) => (grandTotal ? Math.round((n / grandTotal) * 1000) / 10 : 0);
 
@@ -44,6 +44,9 @@ async function spendingByCategory(from, to) {
         groupOut.push({ group: g.name, total: groupTotal, percent: pct(groupTotal), items: items.map((i) => ({ ...i, percent: pct(i.total) })) });
       }
     }
+    // Money recorded against the type with no group of its own stays visible under "No group".
+    const noGroup = totals.get(`${type}||`) || 0;
+    if (noGroup > 0) groupOut.push({ group: 'No group', total: noGroup, percent: pct(noGroup), items: [] });
     const typeTotal = groupOut.reduce((s, g) => s + g.total, 0);
     if (typeTotal > 0) types.push({ type, total: typeTotal, percent: pct(typeTotal), groups: groupOut });
   }
@@ -75,6 +78,9 @@ async function incomeByCategory(from, to) {
         groupOut.push({ group: g.name, total: groupTotal, percent: pct(groupTotal), items: items.map((i) => ({ ...i, percent: pct(i.total) })) });
       }
     }
+    // Income recorded against the type with no group of its own stays visible under "No group".
+    const noGroup = totals.get(`${type}||`) || 0;
+    if (noGroup > 0) groupOut.push({ group: 'No group', total: noGroup, percent: pct(noGroup), items: [] });
     const typeTotal = groupOut.reduce((s, g) => s + g.total, 0);
     if (typeTotal > 0) types.push({ type, total: typeTotal, percent: pct(typeTotal), groups: groupOut });
   }

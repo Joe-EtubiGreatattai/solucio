@@ -34,7 +34,7 @@ test('assertValidCategory accepts real paths and rejects invented ones', async (
   expect(await valid('Recurrent', 'Staff Wages', null)).toBe(true);
   expect(await valid('Recurrent', 'Staff Wages', undefined)).toBe(true);
   expect(await valid('Recurrent', 'Staff Wages', 'Bonus')).toBe(false);
-  expect(await valid('Recurrent', 'Hospital Consumables', null)).toBe(false);
+  expect(await valid('Recurrent', 'Hospital Consumables', null)).toBe(true); // stopping at the group is allowed
   expect(await valid('Capital', 'Structural', 'Nursing')).toBe(false);
   expect(await valid('Capital', 'Equipment', 'Nursing')).toBe(true);
   expect(await valid('constructor', 'x', null)).toBe(false);
@@ -57,11 +57,12 @@ test('hidden nodes are not valid for new expenses', async () => {
   expect(await valid('Capital', 'Equipment', 'Radiology')).toBe(false);
 });
 
-test('a group that gains an item now requires one', async () => {
+test('a group that gains an item still accepts the group on its own', async () => {
   await ensureDefaultCategories();
   await Category.updateOne({ name: 'Recurrent' }, { $push: { 'groups.$[g].items': { name: 'Bonus' } } }, { arrayFilters: [{ 'g.name': 'Staff Wages' }] });
-  expect(await valid('Recurrent', 'Staff Wages', null)).toBe(false);
+  expect(await valid('Recurrent', 'Staff Wages', null)).toBe(true); // not forced to pick the new sub-item
   expect(await valid('Recurrent', 'Staff Wages', 'Bonus')).toBe(true);
+  expect(await valid('Recurrent', 'Staff Wages', 'Nope')).toBe(false); // but an invented item is still rejected
 });
 
 describe('GET /api/categories', () => {

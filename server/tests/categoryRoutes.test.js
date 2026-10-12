@@ -76,13 +76,14 @@ describe('adding categories, groups and items', () => {
     expect((await post(admin.token, 'items', { type: 'Recurrent', group: 'Nope', name: 'X' })).status).toBe(404);
   });
 
-  test('giving a leaf group its first item makes an item required from then on', async () => {
+  test('giving a leaf group its first item still lets the group be used on its own', async () => {
     expect((await expense(admin.token, { type: 'Recurrent', group: 'Rents' })).status).toBe(201);
     await post(admin.token, 'items', { type: 'Recurrent', group: 'Rents', name: 'Warehouse' });
-    const res = await expense(admin.token, { type: 'Recurrent', group: 'Rents' });
-    expect(res.status).toBe(400);
-    expect(res.body.fields.category).toBeDefined();
+    // The group keeps working without choosing the new item...
+    expect((await expense(admin.token, { type: 'Recurrent', group: 'Rents' })).status).toBe(201);
+    // ...and the new item can be chosen, while an invented one is still rejected.
     expect((await expense(admin.token, { type: 'Recurrent', group: 'Rents', item: 'Warehouse' })).status).toBe(201);
+    expect((await expense(admin.token, { type: 'Recurrent', group: 'Rents', item: 'Nope' })).status).toBe(400);
   });
 
   test('additions are audited', async () => {

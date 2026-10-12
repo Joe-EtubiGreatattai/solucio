@@ -203,19 +203,13 @@ router.post('/:id/approve', requirePermission('statements.approve'), asyncHandle
       action, ...(create && { create }),
     });
     if (!transaction.type) {
-      // Income may be left uncategorized, but an expense can't be posted without a category
-      // (the Expense model requires a type and group), so flag it instead of crashing mid-import.
+      // Income may be left uncategorized, but an expense needs at least a type (the Expense model
+      // requires one), so flag it instead of crashing mid-import.
       if (ledger === 'expense') addBlocker('choose');
       continue;
     }
     const issue = classifyAgainstTree(ledger === 'income' ? incomeTree : expenseTree, transaction.type, transaction.group, transaction.item);
-    if (issue) {
-      addBlocker(issue.action, issue.create);
-      continue;
-    }
-    // An expense also needs a group even when its type has no sub-groups, or posting would
-    // fail after earlier rows were already written.
-    if (ledger === 'expense' && !transaction.group) addBlocker('choose');
+    if (issue) addBlocker(issue.action, issue.create);
   }
   if (blockers.length) {
     const n = blockers.length;

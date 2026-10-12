@@ -358,7 +358,8 @@ function categorizeExpense(t, ctx) {
   const { resolve, keywordMemory, names, ownerName } = ctx;
   const narration = t.narration || '';
   if (isBankCharge(narration)) {
-    const target = resolve({ group: 'Tax and Dues', item: 'Others' });
+    // Prefer a dedicated "Bank charges" group when the clinic has one; fall back to Tax and Dues otherwise.
+    const target = resolve({ group: 'Bank charges' }) || resolve({ group: 'Tax and Dues', item: 'Others' });
     if (target) return { ...target, confidence: 'high', categorySource: 'rule', reason: 'Bank charge' };
   }
 

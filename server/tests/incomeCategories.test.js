@@ -29,7 +29,8 @@ describe('income category tree', () => {
   test('assertValidCategory checks the right tree for the kind', async () => {
     await ensureDefaultCategories();
     const incomeType = (await getTree({ kind: 'income' }))[0];
-    expect(await okIncome(incomeType.type, incomeType.groups[0].name, null)).toBe(incomeType.groups[0].items.length === 0);
+    // stopping at the group is valid whether or not the group has sub-items
+    expect(await okIncome(incomeType.type, incomeType.groups[0].name, null)).toBe(true);
     // an expense category is not valid as an income category
     expect(await okIncome('Recurrent', 'Staff Wages', null)).toBe(false);
   });

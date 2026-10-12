@@ -77,6 +77,13 @@ describe('bank charges', () => {
     ] }]);
     expect(one('COMMISSION MOBILE TRF TO PAY/ /ZAINAB LADIDI SHAIBU', 'expense', { memory })).toMatchObject({ group: 'Tax and Dues' });
   });
+
+  test('routes to a "Bank charges" group when the clinic has one', () => {
+    const withBankCharges = [{ type: 'Recurrent', groups: [{ name: 'Bank charges', items: [] }, { name: 'Tax and Dues', items: ['Others'] }] }];
+    expect(one('COMMISSION MOBILE TRF TO PAY/ /ZAINAB LADIDI SHAIBU', 'expense', { tree: withBankCharges })).toMatchObject({
+      group: 'Bank charges', item: null, confidence: 'high', reason: expect.stringMatching(/bank charge/i),
+    });
+  });
 });
 
 describe('payees', () => {

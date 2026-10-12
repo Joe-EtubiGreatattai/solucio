@@ -19,7 +19,7 @@ const createSchema = z
     date: recordDate,
     accountId: objectId,
     type: z.string(),
-    group: z.string(),
+    group: z.string().nullish(),
     item: z.string().nullish(),
     note: z.string().trim().max(500).optional(),
   });
@@ -42,9 +42,9 @@ router.post('/', requirePermission('expenses.record'), validate(createSchema), a
   }
   const expense = await Expense.create({
     amount: b.amount, date: parseLagosDate(b.date), account: account._id,
-    type: b.type, group: b.group, item: b.item || null, note: b.note, recordedBy: req.user._id,
+    type: b.type, group: b.group || null, item: b.item || null, note: b.note, recordedBy: req.user._id,
   });
-  await logAudit({ actor: req.user._id, action: 'expense.create', targetModel: 'Expense', targetId: expense._id, details: { amount: b.amount, type: b.type, group: b.group, item: b.item || null } });
+  await logAudit({ actor: req.user._id, action: 'expense.create', targetModel: 'Expense', targetId: expense._id, details: { amount: b.amount, type: b.type, group: b.group || null, item: b.item || null } });
   res.status(201).json(expense);
 }));
 

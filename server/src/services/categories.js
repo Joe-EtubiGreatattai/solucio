@@ -49,19 +49,25 @@ async function publicTree(kind = 'expense') {
   return (await getTree({ kind })).map((c) => ({ type: c.type, groups: c.groups.map((g) => ({ name: g.name, items: g.items.map((i) => i.name) })) }));
 }
 
-// A new expense must use an active category > group, and an active item whenever the group has any.
+// A record may use a category at whatever depth was chosen: type, type > group, or type > group > item.
+// Every chosen level must be a real, active node and a level can't be skipped (no group without a type,
+// no item without a group), but stopping short of a deeper level that exists is allowed.
 async function assertValidCategory(type, group, item, kind = 'expense') {
   const bad = () => new AppError(400, 'Choose a valid category', { category: 'Choose a valid category' });
+  if (!type) {
+    if (group || item) throw bad();
+    return;
+  }
   const category = await Category.findOne({ kind, name: type, active: true }).lean();
   if (!category) throw bad();
-  const g = category.groups.find((x) => x.name === group && active(x));
-  if (!g) throw bad();
-  const items = g.items.filter(active);
-  if (items.length === 0) {
+  if (!group) {
     if (item) throw bad();
     return;
   }
-  if (!items.some((i) => i.name === item)) throw bad();
+  const g = category.groups.find((x) => x.name === group && active(x));
+  if (!g) throw bad();
+  if (!item) return;
+  if (!g.items.filter(active).some((i) => i.name === item)) throw bad();
 }
 
 // Like assertValidCategory, but instead of throwing it says WHY a category is unusable: 'create' when a
@@ -83,9 +89,9 @@ async function categoryIssue(kind, type, group, item) {
       if (!ok(i)) return { action: 'choose' };
       return null;
     }
-    return g.items.some(ok) ? { action: 'choose' } : null;
+    return null; // stopping at the group is allowed, even when it has sub-items
   }
-  return category.groups.some(ok) ? { action: 'choose' } : null;
+  return null; // stopping at the type is allowed, even when it has groups
 }
 
 // Sync version of categoryIssue that checks against an already-loaded getTree() result, so approving a big
@@ -106,9 +112,9 @@ function classifyAgainstTree(tree, type, group, item) {
       if (!ok(i)) return { action: 'choose' };
       return null;
     }
-    return g.items.some(ok) ? { action: 'choose' } : null;
+    return null; // stopping at the group is allowed, even when it has sub-items
   }
-  return category.groups.some(ok) ? { action: 'choose' } : null;
+  return null; // stopping at the type is allowed, even when it has groups
 }
 
 // Create whatever levels of a type > group > item path are missing. Idempotent: existing levels are left as is.

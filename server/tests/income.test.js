@@ -137,8 +137,8 @@ describe('income categories', () => {
     expect(res.body.item).toBeNull();
   });
 
-  test('a group with items requires one; an expense category is not a valid income category', async () => {
-    expect((await inc(cashier.token, { type: 'Diagnostics', group: 'Radiology' })).status).toBe(400); // Radiology has items
+  test('a group can be used without a sub-item; an expense category is not a valid income category', async () => {
+    expect((await inc(cashier.token, { type: 'Diagnostics', group: 'Radiology' })).status).toBe(201); // Radiology has items, but one isn't required
     expect((await inc(cashier.token, { type: 'Recurrent', group: 'Staff Wages' })).status).toBe(400); // expense tree
     expect((await inc(cashier.token, { type: 'Diagnostics', group: 'Laboratory' })).status).toBe(201); // Laboratory has no items
   });

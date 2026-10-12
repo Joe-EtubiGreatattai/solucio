@@ -7,7 +7,7 @@ const expenseSchema = new Schema(
     date: { type: Date, required: true },
     account: { type: Schema.Types.ObjectId, ref: 'Account', required: true },
     type: { type: String, required: true },
-    group: { type: String, required: true },
+    group: { type: String, default: null },
     item: { type: String, default: null },
     note: { type: String, trim: true },
     recordedBy: { type: Schema.Types.ObjectId, ref: 'User', required: true },
