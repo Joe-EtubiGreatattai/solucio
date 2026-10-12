@@ -45,6 +45,7 @@ export default function BankStatements() {
   const [approveBlockers, setApproveBlockers] = useState(null);
   const [fixing, setFixing] = useState(false);
   const [rechecking, setRechecking] = useState(false);
+  const [markingReviewed, setMarkingReviewed] = useState(false);
   // Holds the id of the statement awaiting a second click, so switching statements never carries it over.
   const [confirmingDelete, setConfirmingDelete] = useState('');
   const [deleting, setDeleting] = useState(false);
@@ -333,7 +334,7 @@ export default function BankStatements() {
                       {transaction.type && selectedIncomeGroup?.items?.length > 0 && <label className="field"><span>Item</span><select value={transaction.item || ''} onChange={(event) => saveTransaction({ type: selectedIncomeType?.type, group: selectedIncomeGroup?.name, item: event.target.value })}><option value="">Choose item</option>{selectedIncomeGroup.items.map((entry) => <option key={entry} value={entry}>{entry}</option>)}</select></label>}
                     </>}
                     <label className="check"><input type="checkbox" checked={isIncluded(transaction)} onChange={() => toggleInclude(transaction)} /><span>Import this transaction</span></label>
-                    <button type="button" onClick={() => saveTransaction({ confidence: 'high' })}>Mark reviewed</button>
+                    <button type="button" disabled={markingReviewed} onClick={async () => { setMarkingReviewed(true); try { await saveTransaction({ confidence: 'high' }); } finally { setMarkingReviewed(false); } }}>{markingReviewed ? 'Saving…' : 'Mark reviewed'}</button>
                     <div className="review-navigation"><button type="button" className="secondary" disabled={reviewIndex <= 0} onClick={() => setSelectedTransactionId(visibleTransactions[reviewIndex - 1]._id)}>Previous</button><button type="button" className="secondary" disabled={reviewIndex >= visibleTransactions.length - 1} onClick={() => setSelectedTransactionId(visibleTransactions[reviewIndex + 1]._id)}>Next</button></div>
                   </div> : <span className="approved-lock">This statement is locked</span>}
                 </aside>}

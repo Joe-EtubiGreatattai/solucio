@@ -69,6 +69,18 @@ test('choosing an item also saves the shown type and group, never an item on its
   }));
 });
 
+test('the Mark reviewed button shows a saving state while the change is in flight', async () => {
+  let resolvePatch;
+  api.patch.mockImplementation(() => new Promise((r) => { resolvePatch = r; }));
+  renderPage();
+  await waitForLoaded();
+  await userEvent.click(screen.getAllByText('IBEDC PREPAID METER')[0]);
+  await userEvent.click(screen.getByRole('button', { name: 'Mark reviewed' }));
+  expect(await screen.findByRole('button', { name: 'Saving…' })).toBeDisabled();
+  resolvePatch(withTransactions([{ ...expenseTx, confidence: 'high' }, incomeTx]));
+  expect(await screen.findByRole('button', { name: 'Mark reviewed' })).toBeEnabled();
+});
+
 test('a transaction can be excluded and re-included from the table', async () => {
   api.patch.mockResolvedValue(withTransactions([{ ...expenseTx, included: false }, incomeTx]));
   renderPage();
