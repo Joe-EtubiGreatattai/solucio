@@ -61,6 +61,19 @@ test('a reviewer can correct a transaction and approval remains blocked until it
   expect(await AuditLog.findOne({ action: 'statement.approve' })).toBeTruthy();
 });
 
+test('a reviewer cannot save an item without its type and group', async () => {
+  const statement = await makeStatement([expenseRow({ type: null, group: null, item: null, confidence: 'needs-review' })]);
+  const id = statement.transactions[0]._id;
+  const bad = await request(app).patch(`/api/statements/${statement.id}/transactions/${id}`)
+    .set(auth(accountant.token)).send({ item: 'Electricity', confidence: 'needs-review' });
+  expect(bad.status).toBe(400);
+  // the full path is accepted
+  const ok = await request(app).patch(`/api/statements/${statement.id}/transactions/${id}`)
+    .set(auth(accountant.token)).send({ type: 'Recurrent', group: 'Servicing & Maintenance', item: 'Electricity', confidence: 'high' });
+  expect(ok.status).toBe(200);
+  expect(ok.body.transactions[0]).toMatchObject({ type: 'Recurrent', group: 'Servicing & Maintenance', item: 'Electricity' });
+});
+
 test('approved statements cannot be changed', async () => {
   const statement = await makeStatement([expenseRow()]);
   await request(app).post(`/api/statements/${statement.id}/approve`).set(auth(admin.token));

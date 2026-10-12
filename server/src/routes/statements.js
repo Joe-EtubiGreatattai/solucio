@@ -14,7 +14,7 @@ const { extractTransactions } = require('../services/statementParser');
 const { categorizeTransactions, loadCategorizerContext, payeeOf, isBankCharge } = require('../services/statementCategorizer');
 const { logAudit } = require('../services/audit');
 const { nextReceiptNumber } = require('../services/receiptNumber');
-const { classifyAgainstTree, getTree } = require('../services/categories');
+const { classifyAgainstTree, getTree, assertValidCategory } = require('../services/categories');
 
 const router = express.Router();
 const listQuery = z.object({ accountId: objectId.optional() });
@@ -91,6 +91,12 @@ router.patch('/:id/transactions/:transactionId', requirePermission('statements.r
     transaction.type = null;
     transaction.group = null;
     transaction.item = null;
+  }
+  // A category can be set at any depth from the top, but never a deeper level without its parents
+  // (no item without a group, no group without a type) — otherwise a row would be left half-categorized.
+  if (['type', 'group', 'item', 'direction'].some((key) => key in body)) {
+    const kind = transaction.direction === 'income' ? 'income' : 'expense';
+    await assertValidCategory(transaction.type || undefined, transaction.group || undefined, transaction.item || undefined, kind);
   }
   if (['type', 'group', 'item', 'direction', 'confidence'].some((key) => key in body)) {
     transaction.categorySource = 'reviewer';

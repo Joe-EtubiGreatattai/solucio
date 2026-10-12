@@ -50,6 +50,25 @@ test('category selects disappear once a row is treated as income', async () => {
   expect(screen.queryByLabelText('Type')).toBeNull();
 });
 
+test('choosing an item also saves the shown type and group, never an item on its own', async () => {
+  const uncat = { _id: 't3', date: '2026-07-15', narration: 'DANIEL OKAFOR TEST TUBES', amount: 50000, direction: 'expense', type: null, group: null, item: null, confidence: 'needs-review', included: true };
+  const st = { ...statement, transactions: [uncat] };
+  api.get.mockImplementation((path, query) => {
+    if (path === '/accounts') return Promise.resolve([account]);
+    if (path === '/categories') return Promise.resolve(query && query.kind === 'income' ? incomeCategories : categories);
+    if (path === '/statements') return Promise.resolve([st]);
+    return Promise.resolve([]);
+  });
+  api.patch.mockResolvedValue(withTransactions([{ ...uncat, type: 'Recurrent', group: 'Servicing & Maintenance', item: 'Electricity' }]));
+  renderPage();
+  await waitForLoaded();
+  await userEvent.click(screen.getAllByText('DANIEL OKAFOR TEST TUBES')[0]);
+  await userEvent.selectOptions(screen.getByLabelText('Item'), 'Electricity');
+  expect(api.patch).toHaveBeenCalledWith('/statements/s1/transactions/t3', expect.objectContaining({
+    type: 'Recurrent', group: 'Servicing & Maintenance', item: 'Electricity',
+  }));
+});
+
 test('a transaction can be excluded and re-included from the table', async () => {
   api.patch.mockResolvedValue(withTransactions([{ ...expenseTx, included: false }, incomeTx]));
   renderPage();
