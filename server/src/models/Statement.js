@@ -15,7 +15,7 @@ const transactionSchema = new Schema(
     // Why the category was suggested, in plain words, and where the suggestion came from. A reviewer's
     // own choice ('reviewer') is never overwritten by re-running categorization.
     reason: { type: String, trim: true },
-    categorySource: { type: String, enum: ['rule', 'memory', 'reviewer', 'similar'] },
+    categorySource: { type: String, enum: ['rule', 'memory', 'learned', 'reviewer', 'similar'] },
     reviewedBy: { type: Schema.Types.ObjectId, ref: 'User' },
     reviewedAt: Date,
     // Whether this row is brought into the books when the statement is approved. Lets someone

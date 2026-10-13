@@ -36,6 +36,13 @@ const incomeRow = (overrides = {}) => ({
   direction: 'income', confidence: 'high', ...overrides,
 });
 
+test('a learned category source is valid on a statement transaction', async () => {
+  // The categorizer tags rows matched by a learned purpose word with categorySource 'learned';
+  // the Statement model must accept it, or importing such a statement fails to save.
+  const statement = await makeStatement([expenseRow({ categorySource: 'learned' })]);
+  expect(statement.transactions[0].categorySource).toBe('learned');
+});
+
 test('lists statements for people with statement access', async () => {
   await makeStatement([expenseRow()]);
   const res = await request(app).get('/api/statements').set(auth(accountant.token));
