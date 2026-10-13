@@ -30,6 +30,19 @@ const renderPage = (auth = {}) => renderLive(<BankStatements />, { auth: { can: 
 // table region loading rather than on narration text, which is ambiguous once something is selected.
 const waitForLoaded = () => screen.findByRole('region', { name: 'Statement transactions' });
 
+test('a successful import shows the ready-for-review notice and no error', async () => {
+  const created = { _id: 's9', fileName: 'Account Statement.pdf', status: 'review', createdAt: '2026-10-13', account, uploadedBy: { name: 'System' }, transactions: [{ ...expenseTx, _id: 'n1' }] };
+  api.uploadPdf.mockResolvedValue(created);
+  renderPage();
+  await waitForLoaded();
+  await userEvent.click(screen.getByRole('button', { name: 'Import statement' }));
+  await userEvent.selectOptions(screen.getByLabelText('Bank account'), 'a1');
+  await userEvent.upload(document.querySelector('input[type="file"]'), new File(['%PDF-1.4'], 'Account Statement.pdf', { type: 'application/pdf' }));
+  await userEvent.click(screen.getByRole('button', { name: 'Import for review' }));
+  expect(await screen.findByRole('status')).toHaveTextContent('ready for review');
+  expect(screen.queryByText(/Cannot read properties of null/)).toBeNull();
+});
+
 test('the transaction editor lets a reviewer switch a row between income and expense', async () => {
   api.patch.mockResolvedValue(withTransactions([{ ...expenseTx, direction: 'income' }, incomeTx]));
   renderPage();

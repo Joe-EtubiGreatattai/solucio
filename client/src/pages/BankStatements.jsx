@@ -90,6 +90,8 @@ export default function BankStatements() {
 
   const upload = async (event) => {
     event.preventDefault();
+    // Capture the form now: event.currentTarget is null once the handler returns, i.e. after the await below.
+    const form = event.currentTarget;
     if (!file || !accountId) {
       setError('Choose a bank account and PDF statement first.');
       return;
@@ -102,7 +104,7 @@ export default function BankStatements() {
       setSelectedId(created._id);
       setSelectedTransactionId(created.transactions[0]?._id || '');
       setFile(null);
-      event.currentTarget.reset();
+      form?.reset();
       setNotice(`${created.fileName} is ready for review.`);
       setError('');
     } catch (err) {
