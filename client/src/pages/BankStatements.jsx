@@ -294,30 +294,48 @@ export default function BankStatements() {
 
               <div className="statement-review-split">
                 <div className="card statement-table-card">
-                  <div className="statement-table-head"><div><h2>Transactions</h2><p>Select a row to edit its category.</p></div><div className="statement-table-actions"><button type="button" className={reviewOnly ? '' : 'secondary'} onClick={() => { setReviewOnly((current) => !current); const first = statement.transactions.find((entry) => isIncluded(entry) && entry.confidence === 'needs-review'); if (first) setSelectedTransactionId(first._id); }}>{reviewOnly ? 'Show all' : `Review queue (${unresolved})`}</button><span>{statement.transactions.filter((entry) => entry.direction === 'income').length} income · {statement.transactions.filter((entry) => entry.direction === 'expense').length} expenses</span></div></div>
-                  <div className="table-wrap" role="region" aria-label="Statement transactions">
-                    <table className="statement-table"><thead><tr><th>Date</th><th>Transaction</th><th>Category</th><th>Review</th><th className="num">Amount</th><th>Import</th></tr></thead><tbody>
-                      {visibleTransactions.map((entry) => (
-                        <tr key={entry._id} className={[transaction?._id === entry._id ? 'selected-row' : '', isIncluded(entry) ? '' : 'excluded'].filter(Boolean).join(' ')} onClick={() => setSelectedTransactionId(entry._id)}>
-                          <td>{formatDate(entry.date)}</td>
-                          <td><b>{entry.narration}</b>{entry.reference && <small>{entry.reference}</small>}</td>
-                          <td>{categoryLabel(entry)}</td>
-                          <td><span className={`confidence ${entry.confidence}`} title={entry.reason || undefined}>{confidenceLabel(entry.confidence)}</span></td>
-                          <td className={`num ${entry.direction}`}>{entry.direction === 'income' ? '+' : '−'}{formatNaira(entry.amount)}</td>
-                          <td className="keep">
-                            {statement.status === 'review' && can('statements.review') ? (
-                              <input
-                                type="checkbox"
-                                checked={isIncluded(entry)}
-                                aria-label={`Import ${entry.narration}`}
-                                onClick={(event) => event.stopPropagation()}
-                                onChange={() => toggleInclude(entry)}
-                              />
-                            ) : (isIncluded(entry) ? 'Yes' : 'No')}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody></table>
+                  <div className="statement-table-head"><div><h2>Transactions</h2><p>Select a record to edit its category.</p></div><div className="statement-table-actions"><button type="button" className={reviewOnly ? '' : 'secondary'} onClick={() => { setReviewOnly((current) => !current); const first = statement.transactions.find((entry) => isIncluded(entry) && entry.confidence === 'needs-review'); if (first) setSelectedTransactionId(first._id); }}>{reviewOnly ? 'Show all' : `Review queue (${unresolved})`}</button><span>{statement.transactions.filter((entry) => entry.direction === 'income').length} income · {statement.transactions.filter((entry) => entry.direction === 'expense').length} expenses</span></div></div>
+                  <div className="statement-rows" role="region" aria-label="Statement transactions">
+                    {visibleTransactions.map((entry) => {
+                      const review = statement.status === 'review' && can('statements.review');
+                      return (
+                        <div
+                          key={entry._id}
+                          className={['statement-row', entry.direction, transaction?._id === entry._id ? 'selected-row' : '', isIncluded(entry) ? '' : 'excluded'].filter(Boolean).join(' ')}
+                          role="button"
+                          tabIndex={0}
+                          aria-pressed={transaction?._id === entry._id}
+                          onClick={() => setSelectedTransactionId(entry._id)}
+                          onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setSelectedTransactionId(entry._id); } }}
+                        >
+                          <div className="statement-row-main">
+                            <b>{entry.narration}</b>
+                            {entry.reference && <small>{entry.reference}</small>}
+                            <div className="statement-row-tags">
+                              <span className="statement-row-cat">{categoryLabel(entry)}</span>
+                              <span className={`confidence ${entry.confidence}`} title={entry.reason || undefined}>{confidenceLabel(entry.confidence)}</span>
+                              <span className="statement-row-date">{formatDate(entry.date)}</span>
+                            </div>
+                          </div>
+                          <div className="statement-row-side">
+                            <span className={`statement-row-amount ${entry.direction}`}>{entry.direction === 'income' ? '+' : '−'}{formatNaira(entry.amount)}</span>
+                            {review ? (
+                              <label className="statement-row-keep" onClick={(event) => event.stopPropagation()}>
+                                <input
+                                  type="checkbox"
+                                  checked={isIncluded(entry)}
+                                  aria-label={`Import ${entry.narration}`}
+                                  onChange={() => toggleInclude(entry)}
+                                />
+                                <span>Import</span>
+                              </label>
+                            ) : (
+                              <span className="statement-row-keep muted">{isIncluded(entry) ? 'Imported' : 'Skipped'}</span>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
 

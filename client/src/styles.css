@@ -60,6 +60,28 @@ body{font-size:15px}.side-nav a{font-size:13px}.workspace-head span{font-size:12
 .cash-flow-detail-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin:18px 0 0}.cash-flow-detail h3{margin:0 0 8px;font-size:13px}.actionable-line{margin:0 0 12px;padding:9px 11px;border-radius:9px;color:var(--soft-ink);background:var(--green-soft);font-size:12px;line-height:1.5}.outflow-list{display:grid;gap:9px;margin:0;padding:0;list-style:none}.outflow-list li{position:relative;display:flex;justify-content:space-between;align-items:center;gap:10px;padding:7px 9px;border-radius:8px;overflow:hidden}.outflow-bar{position:absolute;inset:0 auto 0 0;z-index:0;border-radius:8px;background:var(--green-soft)}.outflow-bar.method{background:var(--blue-soft)}.outflow-name{position:relative;z-index:1;overflow:hidden;color:var(--soft-ink);font-size:12px;font-weight:700;text-overflow:ellipsis;white-space:nowrap}.outflow-value{position:relative;z-index:1;flex:none;display:flex;align-items:baseline;gap:5px;font-size:12px;font-weight:700}.outflow-value small{color:var(--muted);font-size:10px;font-weight:600}.cash-flow-skeleton{display:grid;gap:10px;padding:22px}.cash-flow-skeleton .skeleton{min-height:60px}
 @media(max-width:760px){.cash-flow-kpis{grid-template-columns:1fr 1fr}.cash-flow-detail-grid{grid-template-columns:1fr}}
 .statement-table tr.excluded td{color:var(--muted);opacity:.62}.statement-table tr.excluded td b{color:var(--muted)}.statement-table td input[type="checkbox"]{width:auto;min-height:auto}
+/* Statement transactions as a stacked list of self-contained record cards — every field fits in one
+   view beside the editor panel, so there is no horizontal scrolling. */
+.statement-rows{display:flex;flex-direction:column;gap:7px;padding:6px 16px 16px;max-height:calc(100vh - 252px);overflow-y:auto;overflow-x:hidden}
+.statement-row{display:grid;grid-template-columns:3px minmax(0,1fr) auto;column-gap:13px;align-items:center;padding:11px 13px 11px 0;border:1px solid var(--line);border-radius:12px;background:#fff;cursor:pointer;transition:border-color .14s,background .14s,box-shadow .14s}
+.statement-row:hover{border-color:#bfe0cc;background:#fafefb}
+.statement-row.selected-row{border-color:#8fc7a6;background:#eff8f1;box-shadow:inset 0 0 0 1px #8fc7a6}
+.statement-row:before{content:"";align-self:stretch;border-radius:12px 0 0 12px;background:var(--line-strong)}
+.statement-row.income:before{background:#2d8a59}
+.statement-row.expense:before{background:#cf7681}
+.statement-row-main{min-width:0;display:grid;gap:3px}
+.statement-row-main b{color:var(--soft-ink);font-size:12px;font-weight:700;line-height:1.35;overflow-wrap:anywhere}
+.statement-row-main small{overflow:hidden;color:var(--muted);font-size:9px;text-overflow:ellipsis;white-space:nowrap}
+.statement-row-tags{display:flex;flex-wrap:wrap;gap:6px 9px;align-items:center;margin-top:3px}
+.statement-row-cat{color:#5f5969;font-size:10px;font-weight:700}
+.statement-row-date{color:var(--muted);font-size:10px;font-variant-numeric:tabular-nums;margin-left:auto}
+.statement-row-side{display:grid;justify-items:end;gap:7px;flex:none;padding-left:4px}
+.statement-row-amount{font-size:13px;font-weight:800;font-variant-numeric:tabular-nums;white-space:nowrap}
+.statement-row-keep{display:inline-flex;gap:5px;align-items:center;color:var(--muted);font-size:10px;font-weight:700;cursor:pointer}
+.statement-row-keep input{width:auto;min-height:auto;margin:0;cursor:pointer}
+.statement-row.excluded{opacity:.6}
+.statement-row.excluded .statement-row-main b,.statement-row.excluded .statement-row-amount{color:var(--muted)}
+@media(max-width:1100px){.statement-rows{max-height:none}}
 .statement-bulk-include{display:flex;flex-wrap:wrap;align-items:center;gap:11px;margin:0 0 12px;padding:11px 14px}.statement-bulk-include>span{color:var(--muted);font-size:11px;font-weight:800}.statement-bulk-include small{margin-left:auto;color:var(--muted);font-size:10px}
 @media(max-width:620px){.statement-bulk-include{flex-direction:column;align-items:stretch}.statement-bulk-include small{margin-left:0}}
 .transaction-reason{margin-top:8px!important;padding:7px 9px;border-radius:8px;color:var(--soft-ink)!important;background:var(--blue-soft);font-size:11px;line-height:1.4}
