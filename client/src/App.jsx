@@ -8,7 +8,8 @@ import Expenses from './pages/Expenses';
 import Dashboard from './pages/Dashboard';
 import Reports from './pages/Reports';
 import Activity from './pages/Activity';
-import BankStatements from './pages/BankStatements';
+import StatementsLibrary from './pages/StatementsLibrary';
+import StatementReview from './pages/StatementReview';
 import Admin from './pages/Admin';
 import { Skeleton } from './components/Skeleton';
 import { allowsPath, visibleNav } from './nav';
@@ -32,7 +33,8 @@ export default function App() {
         />
         <Route path="/income" element={guard('/income', <Income />)} />
         <Route path="/expenses" element={guard('/expenses', <Expenses />)} />
-        <Route path="/statements" element={guard('/statements', <BankStatements />)} />
+        <Route path="/statements" element={guard('/statements', <StatementsLibrary />)} />
+        <Route path="/statements/:id" element={guard('/statements', <StatementReview />)} />
         <Route path="/reports" element={guard('/reports', <Reports />)} />
         <Route path="/activity" element={guard('/activity', <Activity />)} />
         <Route path="/admin" element={guard('/admin', <Admin />)} />

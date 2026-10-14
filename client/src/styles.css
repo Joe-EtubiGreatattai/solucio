@@ -82,6 +82,32 @@ body{font-size:15px}.side-nav a{font-size:13px}.workspace-head span{font-size:12
 .statement-row.excluded{opacity:.6}
 .statement-row.excluded .statement-row-main b,.statement-row.excluded .statement-row-amount{color:var(--muted)}
 @media(max-width:1100px){.statement-rows{max-height:none}}
+/* Library: imported statements as clickable cards, and the review page's back link. */
+.statement-library-head{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin:4px 2px 10px}
+.statement-library-head h2{margin:0;font-size:14px}
+.statement-library-head span{color:var(--muted);font-size:11px}
+.statement-library{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:10px}
+.statement-card{display:grid;grid-template-columns:38px minmax(0,1fr) auto;gap:11px;align-items:center;padding:14px;border:1px solid var(--line);border-radius:14px;background:#fff;text-align:left;cursor:pointer;box-shadow:none;transition:border-color .14s,box-shadow .14s,transform .14s}
+.statement-card:hover:not(:disabled),.statement-card:focus-visible,.statement-card:active:not(:disabled){border-color:var(--blue);background:var(--blue);box-shadow:0 8px 16px rgba(47,114,74,.18);transform:translateY(-2px)}
+/* On the dark hover/focus background, lift the text so it stays legible. */
+.statement-card:hover .statement-card-body b,.statement-card:focus-visible .statement-card-body b,.statement-card:active .statement-card-body b{color:#fff}
+.statement-card:hover .statement-card-body small,.statement-card:focus-visible .statement-card-body small,.statement-card:active .statement-card-body small{color:#d7efe0}
+.statement-card:hover .statement-list-file,.statement-card:focus-visible .statement-list-file,.statement-card:active .statement-list-file{color:#fff;background:rgba(255,255,255,.22)}
+.statement-card .statement-list-file{width:38px;height:40px;font-size:9px}
+.statement-card-body{min-width:0}
+.statement-card-body b{display:block;overflow:hidden;color:var(--ink);font-size:13px;text-overflow:ellipsis;white-space:nowrap}
+.statement-card-body small{display:block;margin-top:3px;overflow:hidden;color:var(--muted);font-size:10px;text-overflow:ellipsis;white-space:nowrap}
+.statement-back{display:inline-block;margin-bottom:6px;color:var(--muted);font-size:11px;font-weight:700;text-decoration:none}
+.statement-back:hover{color:#34744f}
+/* The record editor opens as a modal instead of a side panel. */
+.statement-editor-modal .transaction-editor{position:relative;display:block;width:min(480px,100%);max-height:calc(100vh - 56px);margin:0;padding:22px;overflow:auto;border-radius:16px;box-shadow:0 24px 60px rgba(7,22,37,.3);animation:modal-in .2s ease both}
+.statement-editor-modal .transaction-editor h2{margin:2px 40px 0 0}
+.statement-editor-modal .transaction-controls{display:grid;grid-template-columns:1fr;min-width:0;gap:11px;margin-top:17px}
+.statement-editor-modal .transaction-controls>button{width:100%;margin-top:2px}
+.statement-editor-modal .review-navigation{grid-template-columns:1fr 1fr}
+.statement-editor-modal .approved-lock{display:inline-block;margin-top:16px}
+.modal-close{position:absolute;top:13px;right:13px;display:grid;place-items:center;width:28px;height:28px;min-height:28px;padding:0;border-radius:50%;color:#5c6b61;background:#eef2ef;font-size:17px;line-height:1}
+.modal-close:hover:not(:disabled){color:#2f4a3b;background:#e2ebe5;box-shadow:none;transform:none}
 .statement-bulk-include{display:flex;flex-wrap:wrap;align-items:center;gap:11px;margin:0 0 12px;padding:11px 14px}.statement-bulk-include>span{color:var(--muted);font-size:11px;font-weight:800}.statement-bulk-include small{margin-left:auto;color:var(--muted);font-size:10px}
 @media(max-width:620px){.statement-bulk-include{flex-direction:column;align-items:stretch}.statement-bulk-include small{margin-left:0}}
 .transaction-reason{margin-top:8px!important;padding:7px 9px;border-radius:8px;color:var(--soft-ink)!important;background:var(--blue-soft);font-size:11px;line-height:1.4}
