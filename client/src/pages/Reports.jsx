@@ -5,6 +5,7 @@ import { useLiveRefresh } from '../realtime/RealtimeProvider';
 import { useAuth } from '../auth/AuthContext';
 import DateRange from '../components/DateRange';
 import Field from '../components/Field';
+import { useAccounts } from '../hooks/useAccounts';
 import { rangeFor } from '../utils/dates';
 import { formatNaira } from '../utils/money';
 import { downloadBlob } from '../utils/download';
@@ -14,8 +15,14 @@ import CashFlowAnalysis from '../components/CashFlowAnalysis';
 
 export default function Reports() {
   const live = useLiveRefresh(['reports']);
-  const { can } = useAuth();
+  const { can, isAdmin } = useAuth();
+  const { accounts } = useAccounts();
   const [range, setRange] = useStoredState('solucio:report-range', rangeFor('month'));
+  // Admins can narrow every report on this page to a single bank/account; '' means all accounts.
+  const [accountId, setAccountId] = useStoredState('solucio:report-account', '');
+  // Guard against a stored account that no longer exists (or a non-admin): fall back to all accounts.
+  const scopeId = isAdmin && accounts.some((a) => a._id === accountId) ? accountId : '';
+  const scopedAccount = accounts.find((a) => a._id === scopeId);
   const [report, setReport] = useState(null);
   const [income, setIncome] = useState(null);
   const [error, setError] = useState('');
@@ -26,11 +33,13 @@ export default function Reports() {
   useEffect(() => {
     if (!range.from || !range.to) return;
     let ignore = false;
-    Promise.all([api.get('/reports/spending-by-category', range), api.get('/reports/income-by-category', range)])
+    const query = { ...range, ...(scopeId ? { accountId: scopeId } : {}) };
+    setReport(null); setIncome(null);
+    Promise.all([api.get('/reports/spending-by-category', query), api.get('/reports/income-by-category', query)])
       .then(([spending, incomeCats]) => { if (!ignore) { setReport(spending); setIncome(incomeCats); setError(''); } })
       .catch((e) => { if (!ignore) setError(e.message); });
     return () => { ignore = true; };
-  }, [range, live]);
+  }, [range, scopeId, live]);
 
   const chart = report ? report.types.flatMap((t) => t.groups.map((g) => ({ name: `${t.type}: ${g.group}`, amount: g.total, percent: g.percent }))) : [];
   const colours = ['#8964ee', '#b29af7', '#64c7ad', '#f2ad6e', '#ee7f98', '#6a91d9', '#d6c6fa'];
@@ -40,7 +49,7 @@ export default function Reports() {
   const exportFile = async () => {
     setBusy(true);
     try {
-      const blob = await api.blob('/reports/export', { type: exportType, format, ...range });
+      const blob = await api.blob('/reports/export', { type: exportType, format, ...range, ...(scopeId ? { accountId: scopeId } : {}) });
       downloadBlob(blob, `solucio-${exportType}-${range.from}_to_${range.to}.${format}`);
     } catch (e) {
       setError(e.message);
@@ -53,8 +62,19 @@ export default function Reports() {
     <>
       <div className="page-title-row">
         <h1>Reports</h1>
-        <span className="page-hint">{range.from} to {range.to}</span>
+        <span className="page-hint">{range.from} to {range.to}{scopedAccount ? ` · ${scopedAccount.name}` : ''}</span>
       </div>
+      {isAdmin && accounts.length > 0 && (
+        <div className="card report-account-filter">
+          <Field label="Bank / account">
+            <select value={scopeId} onChange={(e) => setAccountId(e.target.value)}>
+              <option value="">All accounts</option>
+              {accounts.map((a) => <option key={a._id} value={a._id}>{a.name}{a.bankName ? ` · ${a.bankName}` : ''}</option>)}
+            </select>
+          </Field>
+          <small>Every chart, the cash-flow analysis and exports below are scoped to this selection.</small>
+        </div>
+      )}
       <details className="workspace-disclosure workspace-disclosure-compact">
         <summary>Change report period</summary>
         <DateRange value={range} onChange={setRange} />
@@ -80,7 +100,7 @@ export default function Reports() {
         </details>
       )}
 
-      <CashFlowAnalysis range={range} />
+      <CashFlowAnalysis range={range} accountId={scopeId} />
 
       <h2>Spending by category</h2>
       {!report && !error && <div className="card report-skeleton"><Skeleton /><Skeleton /><Skeleton /></div>}

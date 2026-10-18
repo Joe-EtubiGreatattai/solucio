@@ -12,33 +12,33 @@ const { renderXlsx, renderTablePdf } = require('../services/exporters');
 const rangeShape = { from: isoDate, to: isoDate };
 const ordered = (d) => d.from <= d.to;
 const orderedMsg = { message: 'From must be on or before To', path: ['from'] };
-const rangeQuery = z.object(rangeShape).refine(ordered, orderedMsg);
-const balancesQuery = z.object({ asOf: isoDate.optional() });
+const rangeQuery = z.object({ ...rangeShape, accountId: objectId.optional() }).refine(ordered, orderedMsg);
+const balancesQuery = z.object({ asOf: isoDate.optional(), accountId: objectId.optional() });
 
 router.use(authenticate);
 
 router.get('/summary', requirePermission('reports.view'), validate(rangeQuery, 'query'), asyncHandler(async (req, res) => {
-  const { from, to } = req.validated.query;
-  res.json(await reports.summary(from, to));
+  const { from, to, accountId } = req.validated.query;
+  res.json(await reports.summary(from, to, accountId));
 }));
 
 router.get('/spending-by-category', requirePermission('reports.view'), validate(rangeQuery, 'query'), asyncHandler(async (req, res) => {
-  const { from, to } = req.validated.query;
-  res.json(await reports.spendingByCategory(from, to));
+  const { from, to, accountId } = req.validated.query;
+  res.json(await reports.spendingByCategory(from, to, accountId));
 }));
 
 router.get('/income-by-category', requirePermission('reports.view'), validate(rangeQuery, 'query'), asyncHandler(async (req, res) => {
-  const { from, to } = req.validated.query;
-  res.json(await reports.incomeByCategory(from, to));
+  const { from, to, accountId } = req.validated.query;
+  res.json(await reports.incomeByCategory(from, to, accountId));
 }));
 
 router.get('/account-balances', requirePermission('reports.view'), validate(balancesQuery, 'query'), asyncHandler(async (req, res) => {
-  res.json(await reports.accountBalances(req.validated.query.asOf));
+  res.json(await reports.accountBalances(req.validated.query.asOf, req.validated.query.accountId));
 }));
 
 router.get('/cash-flow', requirePermission('reports.view'), validate(rangeQuery, 'query'), asyncHandler(async (req, res) => {
-  const { from, to } = req.validated.query;
-  res.json(await reports.cashFlow(from, to));
+  const { from, to, accountId } = req.validated.query;
+  res.json(await reports.cashFlow(from, to, accountId));
 }));
 
 const exportQuery = z

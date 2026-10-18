@@ -1,28 +1,32 @@
+const mongoose = require('mongoose');
 const Income = require('../models/Income');
 const Expense = require('../models/Expense');
 const Account = require('../models/Account');
 const { getTree } = require('./categories');
 const { parseLagosDate, dayAfter } = require('../utils/dates');
 
-const rangeMatch = (from, to) => ({
+// An optional accountId scopes a report to one bank/account; omitted, it aggregates every account.
+const withAccount = (match, accountId) => (accountId ? { ...match, account: new mongoose.Types.ObjectId(accountId) } : match);
+
+const rangeMatch = (from, to, accountId) => withAccount({
   voided: false,
   date: { $gte: parseLagosDate(from), $lt: dayAfter(parseLagosDate(to)) },
-});
+}, accountId);
 
 async function totalFor(Model, match) {
   const [r] = await Model.aggregate([{ $match: match }, { $group: { _id: null, total: { $sum: '$amount' }, count: { $sum: 1 } } }]);
   return { total: r ? r.total : 0, count: r ? r.count : 0 };
 }
 
-async function summary(from, to) {
-  const match = rangeMatch(from, to);
+async function summary(from, to, accountId) {
+  const match = rangeMatch(from, to, accountId);
   const [income, spending] = await Promise.all([totalFor(Income, match), totalFor(Expense, match)]);
   return { from, to, income, spending, net: income.total - spending.total };
 }
 
-async function spendingByCategory(from, to) {
+async function spendingByCategory(from, to, accountId) {
   const rows = await Expense.aggregate([
-    { $match: rangeMatch(from, to) },
+    { $match: rangeMatch(from, to, accountId) },
     { $group: { _id: { type: '$type', group: '$group', item: '$item' }, total: { $sum: '$amount' } } },
   ]);
   const totals = new Map(rows.map((r) => [`${r._id.type}|${r._id.group || ''}|${r._id.item || ''}`, r.total]));
@@ -54,9 +58,9 @@ async function spendingByCategory(from, to) {
 }
 
 // Income grouped under the income category tree, with everything uncategorized kept in its own bucket.
-async function incomeByCategory(from, to) {
+async function incomeByCategory(from, to, accountId) {
   const rows = await Income.aggregate([
-    { $match: rangeMatch(from, to) },
+    { $match: rangeMatch(from, to, accountId) },
     { $group: { _id: { type: '$type', group: '$group', item: '$item' }, total: { $sum: '$amount' } } },
   ]);
   const uncategorized = rows.filter((r) => !r._id.type).reduce((s, r) => s + r.total, 0);
@@ -87,14 +91,16 @@ async function incomeByCategory(from, to) {
   return { grandTotal, uncategorized, types };
 }
 
-async function accountBalances(asOf) {
+async function accountBalances(asOf, accountId) {
   const match = { voided: false };
   if (asOf) match.date = { $lt: dayAfter(parseLagosDate(asOf)) };
+  const withAcct = withAccount(match, accountId);
   const byAccount = async (Model) => {
-    const rows = await Model.aggregate([{ $match: match }, { $group: { _id: '$account', total: { $sum: '$amount' } } }]);
+    const rows = await Model.aggregate([{ $match: withAcct }, { $group: { _id: '$account', total: { $sum: '$amount' } } }]);
     return new Map(rows.map((r) => [String(r._id), r.total]));
   };
-  const [inMap, outMap, accounts] = await Promise.all([byAccount(Income), byAccount(Expense), Account.find().sort('name')]);
+  const accountFilter = accountId ? { _id: accountId } : {};
+  const [inMap, outMap, accounts] = await Promise.all([byAccount(Income), byAccount(Expense), Account.find(accountFilter).sort('name')]);
   const rows = accounts.map((a) => {
     const totalIn = inMap.get(String(a._id)) || 0;
     const totalOut = outMap.get(String(a._id)) || 0;
@@ -157,8 +163,8 @@ const changePct = (curr, prev) => {
 
 // A fuller picture for the Reports page: a trend series with a running cash balance, this period
 // against the one before it, a simple burn-rate/runway estimate, and the biggest drivers of the numbers.
-async function cashFlow(from, to) {
-  const match = rangeMatch(from, to);
+async function cashFlow(from, to, accountId) {
+  const match = rangeMatch(from, to, accountId);
   const [income, expenses, incomeByDay, expenseByDay] = await Promise.all([
     totalFor(Income, match),
     totalFor(Expense, match),
@@ -170,7 +176,7 @@ async function cashFlow(from, to) {
   const bucket = bucketFor(numDays);
 
   const dayBeforeFrom = addDays(from, -1);
-  const startingCash = (await accountBalances(dayBeforeFrom)).grandTotal;
+  const startingCash = (await accountBalances(dayBeforeFrom, accountId)).grandTotal;
   let cumulative = startingCash;
   const series = rebucket(days, bucket).map((row) => {
     const net = row.income - row.expenses;
@@ -180,16 +186,16 @@ async function cashFlow(from, to) {
 
   const prevTo = dayBeforeFrom;
   const prevFrom = addDays(prevTo, -(numDays - 1));
-  const prevMatch = rangeMatch(prevFrom, prevTo);
+  const prevMatch = rangeMatch(prevFrom, prevTo, accountId);
   const [prevIncome, prevExpenses] = await Promise.all([totalFor(Income, prevMatch), totalFor(Expense, prevMatch)]);
   const net = income.total - expenses.total;
   const prevNet = prevIncome.total - prevExpenses.total;
 
-  const cashOnHand = (await accountBalances(to)).grandTotal;
+  const cashOnHand = (await accountBalances(to, accountId)).grandTotal;
   const avgDailyNet = Math.round(net / numDays);
   const runwayDays = avgDailyNet < 0 ? (cashOnHand > 0 ? Math.floor(cashOnHand / Math.abs(avgDailyNet)) : 0) : null;
 
-  const byCategory = await spendingByCategory(from, to);
+  const byCategory = await spendingByCategory(from, to, accountId);
   const topOutflows = byCategory.types
     .flatMap((t) => t.groups.map((g) => ({ type: t.type, group: g.group, total: g.total, percent: g.percent })))
     .sort((a, b) => b.total - a.total)

@@ -130,3 +130,33 @@ describe('income by category', () => {
     expect(r.types.some((t) => t.type === 'Recurrent')).toBe(false);
   });
 });
+
+describe('filtering reports by account', () => {
+  const { spendingByCategory, incomeByCategory, cashFlow } = require('../src/services/reports');
+
+  test('spending, income and cash flow can be scoped to a single account', async () => {
+    const { user } = await createUser('accountant');
+    const a = await makeAccount({ name: 'Bank A' });
+    const b = await makeAccount({ name: 'Bank B' });
+    await makeExpense({ account: a, recordedBy: user, amount: 40000, type: 'Recurrent', group: 'Staff Wages' });
+    await makeExpense({ account: b, recordedBy: user, amount: 90000, type: 'Recurrent', group: 'Staff Wages' });
+    await makeIncome({ account: a, recordedBy: user, amount: 300000, type: 'Diagnostics', group: 'Laboratory' });
+    await makeIncome({ account: b, recordedBy: user, amount: 700000, type: 'Diagnostics', group: 'Laboratory' });
+
+    expect((await spendingByCategory('2026-01-01', '2026-12-31', a.id)).grandTotal).toBe(40000);
+    expect((await incomeByCategory('2026-01-01', '2026-12-31', a.id)).grandTotal).toBe(300000);
+    expect((await cashFlow('2026-01-01', '2026-12-31', a.id)).totals.income).toBe(300000);
+    // no filter aggregates every account
+    expect((await spendingByCategory('2026-01-01', '2026-12-31')).grandTotal).toBe(130000);
+  });
+
+  test('the spending-by-category route honours an accountId query param', async () => {
+    const { user } = await createUser('accountant');
+    const a = await makeAccount({ name: 'Bank A' });
+    const b = await makeAccount({ name: 'Bank B' });
+    await makeExpense({ account: a, recordedBy: user, amount: 40000 });
+    await makeExpense({ account: b, recordedBy: user, amount: 90000 });
+    const { body } = await get(`/spending-by-category?from=2026-01-01&to=2026-12-31&accountId=${a.id}`);
+    expect(body.grandTotal).toBe(40000);
+  });
+});

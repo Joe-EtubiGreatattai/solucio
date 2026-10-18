@@ -33,7 +33,7 @@ const bucketLabel = (date, bucket) => {
   return `${d}/${m}`;
 };
 
-export default function CashFlowAnalysis({ range }) {
+export default function CashFlowAnalysis({ range, accountId = '' }) {
   const live = useLiveRefresh(['reports']);
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
@@ -41,11 +41,12 @@ export default function CashFlowAnalysis({ range }) {
   useEffect(() => {
     if (!range.from || !range.to) return undefined;
     let ignore = false;
-    api.get('/reports/cash-flow', range)
+    setData(null);
+    api.get('/reports/cash-flow', { ...range, ...(accountId ? { accountId } : {}) })
       .then((next) => { if (!ignore) { setData(next); setError(''); } })
       .catch((e) => { if (!ignore) setError(e.message); });
     return () => { ignore = true; };
-  }, [range, live]);
+  }, [range, accountId, live]);
 
   if (error) return <p className="error" role="alert">{error}</p>;
   if (!data) return <div className="card cash-flow-skeleton"><Skeleton /><Skeleton /><Skeleton /></div>;

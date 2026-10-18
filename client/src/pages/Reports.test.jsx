@@ -1,4 +1,5 @@
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { AuthContext } from '../auth/AuthContext';
 import Reports from './Reports';
 import { api } from '../api';
@@ -25,7 +26,10 @@ const emptyCashFlow = {
 };
 beforeEach(() => {
   vi.clearAllMocks();
-  api.get.mockImplementation((path) => Promise.resolve(path === '/reports/cash-flow' ? emptyCashFlow : { grandTotal: 0, types: [] }));
+  api.get.mockImplementation((path) => {
+    if (path === '/accounts') return Promise.resolve([]);
+    return Promise.resolve(path === '/reports/cash-flow' ? emptyCashFlow : { grandTotal: 0, types: [] });
+  });
 });
 
 test('exports are offered only to roles that may export', async () => {
@@ -45,4 +49,30 @@ test('the report refreshes when income, expenses or accounts change', async () =
   await waitFor(() => expect(calls()).toBe(1));
   act(() => socket.fire('data:changed', { resource: 'reports', action: 'create', id: 'x' }));
   await waitFor(() => expect(calls()).toBe(2));
+});
+
+describe('filtering reports by bank/account', () => {
+  const account = { _id: 'a1', name: 'Main Operations', type: 'bank', bankName: 'GTBank' };
+
+  const renderAdmin = () => renderLive(<Reports />, { auth: { can: () => true, isAdmin: true } });
+
+  test('non-admins see no account filter', async () => {
+    renderReports(['reports.view', 'reports.export']);
+    await screen.findByRole('button', { name: 'Download' });
+    expect(screen.queryByLabelText('Bank / account')).toBeNull();
+  });
+
+  test('an admin can scope every report to one account', async () => {
+    api.get.mockImplementation((path) => {
+      if (path === '/accounts') return Promise.resolve([account]);
+      return Promise.resolve(path === '/reports/cash-flow' ? emptyCashFlow : { grandTotal: 0, types: [] });
+    });
+    renderAdmin();
+    const select = await screen.findByLabelText('Bank / account');
+    await act(async () => { await userEvent.selectOptions(select, 'a1'); });
+    await waitFor(() => expect(
+      api.get.mock.calls.some((c) => c[0] === '/reports/spending-by-category' && c[1]?.accountId === 'a1'),
+    ).toBe(true));
+    expect(api.get.mock.calls.some((c) => c[0] === '/reports/cash-flow' && c[1]?.accountId === 'a1')).toBe(true);
+  });
 });
