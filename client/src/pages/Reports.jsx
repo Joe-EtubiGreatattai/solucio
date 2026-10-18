@@ -20,8 +20,11 @@ export default function Reports() {
   const [range, setRange] = useStoredState('solucio:report-range', rangeFor('month'));
   // Admins can narrow every report on this page to a single bank/account; '' means all accounts.
   const [accountId, setAccountId] = useStoredState('solucio:report-account', '');
-  // Guard against a stored account that no longer exists (or a non-admin): fall back to all accounts.
-  const scopeId = isAdmin && accounts.some((a) => a._id === accountId) ? accountId : '';
+  // Filtering reports by bank/account is an administrative capability. Admins have it; so does the
+  // maintenance super-user (which holds every permission but whose role isn't literally "admin").
+  const canScopeByAccount = isAdmin || can('accounts.manage');
+  // Guard against a stored account that no longer exists (or no rights): fall back to all accounts.
+  const scopeId = canScopeByAccount && accounts.some((a) => a._id === accountId) ? accountId : '';
   const scopedAccount = accounts.find((a) => a._id === scopeId);
   const [report, setReport] = useState(null);
   const [income, setIncome] = useState(null);
@@ -64,7 +67,7 @@ export default function Reports() {
         <h1>Reports</h1>
         <span className="page-hint">{range.from} to {range.to}{scopedAccount ? ` · ${scopedAccount.name}` : ''}</span>
       </div>
-      {isAdmin && accounts.length > 0 && (
+      {canScopeByAccount && accounts.length > 0 && (
         <div className="card report-account-filter">
           <Field label="Bank / account">
             <select value={scopeId} onChange={(e) => setAccountId(e.target.value)}>

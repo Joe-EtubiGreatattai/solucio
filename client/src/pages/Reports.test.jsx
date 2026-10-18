@@ -56,10 +56,19 @@ describe('filtering reports by bank/account', () => {
 
   const renderAdmin = () => renderLive(<Reports />, { auth: { can: () => true, isAdmin: true } });
 
-  test('non-admins see no account filter', async () => {
+  test('roles without account rights see no account filter', async () => {
     renderReports(['reports.view', 'reports.export']);
     await screen.findByRole('button', { name: 'Download' });
     expect(screen.queryByLabelText('Bank / account')).toBeNull();
+  });
+
+  test('a super-user with accounts.manage but not the admin role still gets the filter', async () => {
+    api.get.mockImplementation((path) => {
+      if (path === '/accounts') return Promise.resolve([account]);
+      return Promise.resolve(path === '/reports/cash-flow' ? emptyCashFlow : { grandTotal: 0, types: [] });
+    });
+    renderLive(<Reports />, { auth: { can: (p) => p === 'accounts.manage', isAdmin: false } });
+    expect(await screen.findByLabelText('Bank / account')).toBeInTheDocument();
   });
 
   test('an admin can scope every report to one account', async () => {
