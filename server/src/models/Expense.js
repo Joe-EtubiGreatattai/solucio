@@ -18,7 +18,11 @@ const expenseSchema = new Schema(
   },
   { timestamps: true }
 );
-expenseSchema.index({ date: -1 });
-expenseSchema.index({ account: 1 });
+// Matches the list page's exact sort ({ date: -1, createdAt: -1 }), so deep pages don't need an
+// in-memory sort.
+expenseSchema.index({ date: -1, createdAt: -1 });
+// Account-filtered lists, and the reports aggregation that matches { voided, date } over a range.
+expenseSchema.index({ account: 1, date: -1 });
+expenseSchema.index({ voided: 1, date: -1 });
 
 module.exports = mongoose.model('Expense', expenseSchema);

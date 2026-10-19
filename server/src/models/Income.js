@@ -20,7 +20,11 @@ const incomeSchema = new Schema(
   },
   { timestamps: true }
 );
-incomeSchema.index({ date: -1 });
-incomeSchema.index({ account: 1 });
+// Matches the list page's exact sort ({ date: -1, createdAt: -1 }), so deep pages don't need an
+// in-memory sort.
+incomeSchema.index({ date: -1, createdAt: -1 });
+// Account-filtered lists, and the reports aggregation that matches { voided, date } over a range.
+incomeSchema.index({ account: 1, date: -1 });
+incomeSchema.index({ voided: 1, date: -1 });
 
 module.exports = mongoose.model('Income', incomeSchema);
