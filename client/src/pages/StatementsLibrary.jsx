@@ -101,13 +101,16 @@ export default function StatementsLibrary() {
         <div className="statement-library-head"><h2>Imported statements</h2><span>{statements.length} statement{statements.length === 1 ? '' : 's'} · tap one to review</span></div>
         <div className="statement-library" role="list" aria-label="Imported statements">
           {statements.map((entry) => {
-            const unresolved = unresolvedCount(entry);
+            // The list endpoint sends counts only; a just-uploaded statement still carries its full
+            // transactions array, so fall back to it so the new card shows the right numbers immediately.
+            const unresolved = entry.unresolvedCount ?? unresolvedCount(entry);
+            const count = entry.transactionCount ?? entry.transactions?.length ?? 0;
             return (
               <button type="button" role="listitem" key={entry._id} className="statement-card" onClick={() => navigate(`/statements/${entry._id}`)}>
                 <span className="statement-list-file">PDF</span>
                 <div className="statement-card-body">
                   <b>{entry.fileName}</b>
-                  <small>{entry.account?.name || 'Unknown account'} · {entry.transactions.length} transactions · {formatDate(entry.createdAt)}</small>
+                  <small>{entry.account?.name || 'Unknown account'} · {count} transactions · {formatDate(entry.createdAt)}</small>
                 </div>
                 <span className={entry.status === 'approved' ? 'approved-lock' : unresolved ? 'review-count' : 'ready-count'}>
                   {entry.status === 'approved' ? 'Approved' : unresolved ? `${unresolved} to review` : 'Ready'}

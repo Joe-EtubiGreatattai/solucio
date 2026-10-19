@@ -36,6 +36,20 @@ test('lists imported statements as cards with their status', async () => {
   expect(screen.getByText(/1 to review/)).toBeInTheDocument();
 });
 
+test('card counts come from the slim list summary, not a full transactions array', async () => {
+  // The list endpoint now returns counts only; the card must read those and not expect every row.
+  const summary = { _id: 's2', fileName: 'august.pdf', status: 'review', createdAt: '2026-08-20', account, uploadedBy: { name: 'Ada' }, transactionCount: 42, unresolvedCount: 7 };
+  api.get.mockImplementation((path) => {
+    if (path === '/accounts') return Promise.resolve([account]);
+    if (path === '/statements') return Promise.resolve([summary]);
+    return Promise.resolve([]);
+  });
+  renderLibrary();
+  expect(await screen.findByText('august.pdf')).toBeInTheDocument();
+  expect(screen.getByText(/42 transactions/)).toBeInTheDocument();
+  expect(screen.getByText(/7 to review/)).toBeInTheDocument();
+});
+
 test('clicking a statement card opens its review page', async () => {
   renderLibrary();
   await userEvent.click(await screen.findByText('july.pdf'));

@@ -42,16 +42,33 @@ const populated = (id) => Statement.findById(id).populate('account', 'name bankN
 const decidedByPerson = (t) => t.categorySource === 'reviewer' || (!t.categorySource && !!t.reviewedAt);
 const suggestion = (r) => ({ type: r.type, group: r.group, item: r.item, confidence: r.confidence, reason: r.reason, categorySource: r.categorySource });
 
+// The library only needs each statement's identity and two counts. Pulling only the two transaction
+// subfields the counts need — instead of every row's narration, amount, reason, etc. — keeps this list
+// small and fast even with a year of statements on file.
+const summarize = (statement) => {
+  const obj = present(statement);
+  const transactions = obj.transactions || [];
+  const transactionCount = transactions.length;
+  const unresolvedCount = transactions.filter((t) => t.included !== false && t.confidence === 'needs-review').length;
+  delete obj.transactions;
+  return { ...obj, transactionCount, unresolvedCount };
+};
+
 router.get('/', requirePermission('statements.view'), validate(listQuery, 'query'), asyncHandler(async (req, res) => {
   const filter = req.validated.query.accountId ? { account: req.validated.query.accountId } : {};
-  const items = await Statement.find(filter).sort({ createdAt: -1 }).populate('account', 'name bankName accountNumber').populate('uploadedBy', 'name').populate('approvedBy', 'name');
-  res.json(items.map(present));
+  const items = await Statement.find(filter)
+    .select('account fileName holderName status uploadedBy approvedBy approvedAt createdAt transactions.included transactions.confidence')
+    .sort({ createdAt: -1 })
+    .populate('account', 'name bankName accountNumber')
+    .populate('uploadedBy', 'name')
+    .populate('approvedBy', 'name');
+  res.json(items.map(summarize));
 }));
 
 router.get('/:id', requirePermission('statements.view'), asyncHandler(async (req, res) => {
   const statement = await Statement.findById(req.params.id).populate('account', 'name bankName accountNumber').populate('uploadedBy', 'name').populate('approvedBy', 'name');
   if (!statement) throw new AppError(404, 'Statement not found');
-  res.json(present(await Statement.findById(statement._id).populate('account', 'name bankName accountNumber').populate('uploadedBy', 'name').populate('approvedBy', 'name')));
+  res.json(present(statement));
 }));
 
 router.post('/import', requirePermission('statements.import'), express.raw({ type: 'application/pdf', limit: '10mb' }), asyncHandler(async (req, res) => {

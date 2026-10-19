@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { api } from '../api';
@@ -8,6 +8,42 @@ import { formatDate } from '../utils/dates';
 import { formatNaira } from '../utils/money';
 import { Skeleton, TableSkeleton } from '../components/Skeleton';
 import { categoryLabel, confidenceLabel, isIncluded } from './statementUtils';
+
+// A single transaction row. Memoized so that selecting or editing one row only repaints the rows that
+// actually changed, instead of every row in a statement that can run to hundreds or thousands of entries.
+const StatementRow = memo(function StatementRow({ entry, selected, review, onSelect, onToggle }) {
+  return (
+    <div
+      className={['statement-row', entry.direction, selected ? 'selected-row' : '', isIncluded(entry) ? '' : 'excluded'].filter(Boolean).join(' ')}
+      role="button"
+      tabIndex={0}
+      aria-pressed={selected}
+      onClick={() => onSelect(entry._id)}
+      onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onSelect(entry._id); } }}
+    >
+      <div className="statement-row-main">
+        <b>{entry.narration}</b>
+        {entry.reference && <small>{entry.reference}</small>}
+        <div className="statement-row-tags">
+          <span className="statement-row-cat">{categoryLabel(entry)}</span>
+          <span className={`confidence ${entry.confidence}`} title={entry.reason || undefined}>{confidenceLabel(entry.confidence)}</span>
+          <span className="statement-row-date">{formatDate(entry.date)}</span>
+        </div>
+      </div>
+      <div className="statement-row-side">
+        <span className={`statement-row-amount ${entry.direction}`}>{entry.direction === 'income' ? '+' : '−'}{formatNaira(entry.amount)}</span>
+        {review ? (
+          <label className="statement-row-keep" onClick={(event) => event.stopPropagation()}>
+            <input type="checkbox" checked={isIncluded(entry)} aria-label={`Import ${entry.narration}`} onChange={() => onToggle(entry)} />
+            <span>Import</span>
+          </label>
+        ) : (
+          <span className="statement-row-keep muted">{isIncluded(entry) ? 'Imported' : 'Skipped'}</span>
+        )}
+      </div>
+    </div>
+  );
+});
 
 export default function StatementReview() {
   const { id } = useParams();
@@ -54,10 +90,17 @@ export default function StatementReview() {
   const transaction = statement?.transactions.find((entry) => entry._id === selectedTransactionId) || null;
   const closeEditor = () => setSelectedTransactionId('');
   // Excluded rows never need review and never block approval: they simply won't be imported.
-  const includedTransactions = statement?.transactions.filter(isIncluded) || [];
-  const unresolved = includedTransactions.filter((entry) => entry.confidence === 'needs-review').length;
-  const visibleTransactions = statement?.transactions.filter((entry) => !reviewOnly || (isIncluded(entry) && entry.confidence === 'needs-review')) || [];
+  // These scan the whole (potentially large) transactions array, so memoize them: they only change
+  // when the statement reloads or the review-queue toggle flips, not on every keystroke or re-render.
+  const includedTransactions = useMemo(() => statement?.transactions.filter(isIncluded) || [], [statement]);
+  const unresolved = useMemo(() => includedTransactions.filter((entry) => entry.confidence === 'needs-review').length, [includedTransactions]);
+  const visibleTransactions = useMemo(
+    () => statement?.transactions.filter((entry) => !reviewOnly || (isIncluded(entry) && entry.confidence === 'needs-review')) || [],
+    [statement, reviewOnly],
+  );
   const reviewIndex = visibleTransactions.findIndex((entry) => entry._id === transaction?._id);
+  // Whether the list rows show editable import checkboxes (review stage) or read-only labels (approved).
+  const rowsAreReviewable = statement?.status === 'review' && can('statements.review');
 
   useEffect(() => {
     const onKeyDown = (event) => {
@@ -78,10 +121,13 @@ export default function StatementReview() {
   }, [statement, transaction, visibleTransactions, reviewIndex]);
 
   // Every edit to a row — category, direction, or whether to import it — goes through here.
-  const patchTransaction = async (transactionId, changes) => {
-    if (!statement) return;
+  // Stable across row edits (it only depends on the statement's id and the review-queue toggle), so the
+  // memoized rows below keep their callback identity and don't all re-render when one row is clicked.
+  const statementId = statement?._id;
+  const patchTransaction = useCallback(async (transactionId, changes) => {
+    if (!statementId) return;
     try {
-      const updated = await api.patch(`/statements/${statement._id}/transactions/${transactionId}`, changes);
+      const updated = await api.patch(`/statements/${statementId}/transactions/${transactionId}`, changes);
       setStatement(updated);
       if (reviewOnly && changes.confidence === 'high') {
         const next = updated.transactions.find((entry) => isIncluded(entry) && entry.confidence === 'needs-review');
@@ -93,9 +139,10 @@ export default function StatementReview() {
     } catch (err) {
       setError(err.message);
     }
-  };
+  }, [statementId, reviewOnly]);
   const saveTransaction = (changes) => transaction && patchTransaction(transaction._id, changes);
-  const toggleInclude = (entry) => patchTransaction(entry._id, { included: !isIncluded(entry) });
+  const toggleInclude = useCallback((entry) => patchTransaction(entry._id, { included: !isIncluded(entry) }), [patchTransaction]);
+  const selectRow = useCallback((rowId) => setSelectedTransactionId(rowId), []);
 
   // Bring in only the income rows, only the expenses, or everything — one click instead of one row at a time.
   const bulkInclude = async (scope) => {
@@ -229,46 +276,16 @@ export default function StatementReview() {
               <div className="card statement-table-card">
                 <div className="statement-table-head"><div><h2>Transactions</h2><p>Select a record to edit its category.</p></div><div className="statement-table-actions"><button type="button" className={reviewOnly ? '' : 'secondary'} onClick={() => { setReviewOnly((current) => !current); const first = statement.transactions.find((entry) => isIncluded(entry) && entry.confidence === 'needs-review'); if (first) setSelectedTransactionId(first._id); }}>{reviewOnly ? 'Show all' : `Review queue (${unresolved})`}</button><span>{statement.transactions.filter((entry) => entry.direction === 'income').length} income · {statement.transactions.filter((entry) => entry.direction === 'expense').length} expenses</span></div></div>
                 <div className="statement-rows" role="region" aria-label="Statement transactions">
-                  {visibleTransactions.map((entry) => {
-                    const review = statement.status === 'review' && can('statements.review');
-                    return (
-                      <div
-                        key={entry._id}
-                        className={['statement-row', entry.direction, transaction?._id === entry._id ? 'selected-row' : '', isIncluded(entry) ? '' : 'excluded'].filter(Boolean).join(' ')}
-                        role="button"
-                        tabIndex={0}
-                        aria-pressed={transaction?._id === entry._id}
-                        onClick={() => setSelectedTransactionId(entry._id)}
-                        onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setSelectedTransactionId(entry._id); } }}
-                      >
-                        <div className="statement-row-main">
-                          <b>{entry.narration}</b>
-                          {entry.reference && <small>{entry.reference}</small>}
-                          <div className="statement-row-tags">
-                            <span className="statement-row-cat">{categoryLabel(entry)}</span>
-                            <span className={`confidence ${entry.confidence}`} title={entry.reason || undefined}>{confidenceLabel(entry.confidence)}</span>
-                            <span className="statement-row-date">{formatDate(entry.date)}</span>
-                          </div>
-                        </div>
-                        <div className="statement-row-side">
-                          <span className={`statement-row-amount ${entry.direction}`}>{entry.direction === 'income' ? '+' : '−'}{formatNaira(entry.amount)}</span>
-                          {review ? (
-                            <label className="statement-row-keep" onClick={(event) => event.stopPropagation()}>
-                              <input
-                                type="checkbox"
-                                checked={isIncluded(entry)}
-                                aria-label={`Import ${entry.narration}`}
-                                onChange={() => toggleInclude(entry)}
-                              />
-                              <span>Import</span>
-                            </label>
-                          ) : (
-                            <span className="statement-row-keep muted">{isIncluded(entry) ? 'Imported' : 'Skipped'}</span>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
+                  {visibleTransactions.map((entry) => (
+                    <StatementRow
+                      key={entry._id}
+                      entry={entry}
+                      selected={transaction?._id === entry._id}
+                      review={rowsAreReviewable}
+                      onSelect={selectRow}
+                      onToggle={toggleInclude}
+                    />
+                  ))}
                 </div>
               </div>
 

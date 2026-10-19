@@ -50,6 +50,21 @@ test('lists statements for people with statement access', async () => {
   expect(res.body[0]).toMatchObject({ fileName: 'july-statement.pdf', account: { name: 'Main Account' } });
 });
 
+test('the statements list is slim: counts only, not every transaction', async () => {
+  // The library page only needs how many rows a statement has and how many still need review.
+  // Shipping every transaction of every statement is the main thing that made this page slow.
+  await makeStatement([
+    expenseRow({ confidence: 'needs-review', included: true }),
+    expenseRow({ confidence: 'needs-review', included: false }),
+    incomeRow({ confidence: 'high' }),
+  ]);
+  const res = await request(app).get('/api/statements').set(auth(accountant.token));
+  expect(res.status).toBe(200);
+  expect(res.body[0]).toMatchObject({ transactionCount: 3, unresolvedCount: 1 });
+  // The heavy per-row payload must not be sent to the list.
+  expect(res.body[0].transactions).toBeUndefined();
+});
+
 test('a reviewer can correct a transaction and approval remains blocked until it is reviewed', async () => {
   const statement = await makeStatement([expenseRow({ confidence: 'needs-review' })]);
   const transactionId = statement.transactions[0]._id;
