@@ -47,7 +47,8 @@ test('lists statements for people with statement access', async () => {
   await makeStatement([expenseRow()]);
   const res = await request(app).get('/api/statements').set(auth(accountant.token));
   expect(res.status).toBe(200);
-  expect(res.body[0]).toMatchObject({ fileName: 'july-statement.pdf', account: { name: 'Main Account' } });
+  expect(res.body).toMatchObject({ total: 1, page: 1 });
+  expect(res.body.items[0]).toMatchObject({ fileName: 'july-statement.pdf', account: { name: 'Main Account' } });
 });
 
 test('the statements list is slim: counts only, not every transaction', async () => {
@@ -60,9 +61,17 @@ test('the statements list is slim: counts only, not every transaction', async ()
   ]);
   const res = await request(app).get('/api/statements').set(auth(accountant.token));
   expect(res.status).toBe(200);
-  expect(res.body[0]).toMatchObject({ transactionCount: 3, unresolvedCount: 1 });
+  expect(res.body.items[0]).toMatchObject({ transactionCount: 3, unresolvedCount: 1 });
   // The heavy per-row payload must not be sent to the list.
-  expect(res.body[0].transactions).toBeUndefined();
+  expect(res.body.items[0].transactions).toBeUndefined();
+});
+
+test('the statements list is paginated, one page at a time', async () => {
+  for (let i = 0; i < 3; i += 1) await makeStatement([expenseRow()]);
+  const res = await request(app).get('/api/statements?page=2&limit=2').set(auth(accountant.token));
+  expect(res.status).toBe(200);
+  expect(res.body).toMatchObject({ total: 3, page: 2, limit: 2 });
+  expect(res.body.items).toHaveLength(1);
 });
 
 test('a reviewer can correct a transaction and approval remains blocked until it is reviewed', async () => {

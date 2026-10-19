@@ -17,7 +17,11 @@ const { nextReceiptNumber } = require('../services/receiptNumber');
 const { classifyAgainstTree, getTree, assertValidCategory } = require('../services/categories');
 
 const router = express.Router();
-const listQuery = z.object({ accountId: objectId.optional() });
+const listQuery = z.object({
+  accountId: objectId.optional(),
+  page: z.coerce.number().int().min(1).default(1),
+  limit: z.coerce.number().int().min(1).max(200).default(25),
+});
 const updateBody = z.object({
   type: z.string().trim().max(60).nullable().optional(),
   group: z.string().trim().max(60).nullable().optional(),
@@ -55,14 +59,20 @@ const summarize = (statement) => {
 };
 
 router.get('/', requirePermission('statements.view'), validate(listQuery, 'query'), asyncHandler(async (req, res) => {
-  const filter = req.validated.query.accountId ? { account: req.validated.query.accountId } : {};
-  const items = await Statement.find(filter)
-    .select('account fileName holderName status uploadedBy approvedBy approvedAt createdAt transactions.included transactions.confidence')
-    .sort({ createdAt: -1 })
-    .populate('account', 'name bankName accountNumber')
-    .populate('uploadedBy', 'name')
-    .populate('approvedBy', 'name');
-  res.json(items.map(summarize));
+  const { accountId, page, limit } = req.validated.query;
+  const filter = accountId ? { account: accountId } : {};
+  const [items, total] = await Promise.all([
+    Statement.find(filter)
+      .select('account fileName holderName status uploadedBy approvedBy approvedAt createdAt transactions.included transactions.confidence')
+      .sort({ createdAt: -1 })
+      .skip((page - 1) * limit)
+      .limit(limit)
+      .populate('account', 'name bankName accountNumber')
+      .populate('uploadedBy', 'name')
+      .populate('approvedBy', 'name'),
+    Statement.countDocuments(filter),
+  ]);
+  res.json({ items: items.map(summarize), total, page, limit });
 }));
 
 router.get('/:id', requirePermission('statements.view'), asyncHandler(async (req, res) => {

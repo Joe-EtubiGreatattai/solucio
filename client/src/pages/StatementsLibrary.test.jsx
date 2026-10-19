@@ -15,7 +15,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   api.get.mockImplementation((path) => {
     if (path === '/accounts') return Promise.resolve([account]);
-    if (path === '/statements') return Promise.resolve([statement]);
+    if (path === '/statements') return Promise.resolve({ items: [statement], total: 1, page: 1, limit: 25 });
     return Promise.resolve([]);
   });
 });
@@ -41,13 +41,26 @@ test('card counts come from the slim list summary, not a full transactions array
   const summary = { _id: 's2', fileName: 'august.pdf', status: 'review', createdAt: '2026-08-20', account, uploadedBy: { name: 'Ada' }, transactionCount: 42, unresolvedCount: 7 };
   api.get.mockImplementation((path) => {
     if (path === '/accounts') return Promise.resolve([account]);
-    if (path === '/statements') return Promise.resolve([summary]);
+    if (path === '/statements') return Promise.resolve({ items: [summary], total: 1, page: 1, limit: 25 });
     return Promise.resolve([]);
   });
   renderLibrary();
   expect(await screen.findByText('august.pdf')).toBeInTheDocument();
   expect(screen.getByText(/42 transactions/)).toBeInTheDocument();
   expect(screen.getByText(/7 to review/)).toBeInTheDocument();
+});
+
+test('pages through a long library instead of fetching every statement', async () => {
+  api.get.mockImplementation((path) => {
+    if (path === '/accounts') return Promise.resolve([account]);
+    if (path === '/statements') return Promise.resolve({ items: [statement], total: 60, page: 1, limit: 25 });
+    return Promise.resolve([]);
+  });
+  renderLibrary();
+  expect(await screen.findByText('Showing 1–25 of 60')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Previous' })).toBeDisabled();
+  await userEvent.click(screen.getByRole('button', { name: 'Next' }));
+  expect(api.get).toHaveBeenLastCalledWith('/statements', expect.objectContaining({ page: 2, limit: 25 }));
 });
 
 test('clicking a statement card opens its review page', async () => {
@@ -70,7 +83,7 @@ test('a successful import shows the ready-for-review notice and no error', async
 });
 
 test('the empty state invites the first import', async () => {
-  api.get.mockImplementation((path) => (path === '/accounts' ? Promise.resolve([account]) : Promise.resolve([])));
+  api.get.mockImplementation((path) => (path === '/accounts' ? Promise.resolve([account]) : Promise.resolve({ items: [], total: 0, page: 1, limit: 25 })));
   renderLibrary();
   expect(await screen.findByText(/Your review workspace is ready/)).toBeInTheDocument();
 });

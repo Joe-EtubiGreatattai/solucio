@@ -5,9 +5,12 @@ import { useLiveRefresh } from '../realtime/RealtimeProvider';
 import { useAuth } from '../auth/AuthContext';
 import { useAccounts } from '../hooks/useAccounts';
 import Field from '../components/Field';
+import Pagination from '../components/Pagination';
 import { formatDate } from '../utils/dates';
 import { Skeleton } from '../components/Skeleton';
 import { unresolvedCount } from './statementUtils';
+
+const PAGE_SIZE = 25;
 
 // The library lists every imported statement. Reviewing one happens on its own page (/statements/:id),
 // so this page stays focused on importing and choosing what to open.
@@ -20,6 +23,8 @@ export default function StatementsLibrary() {
   const [accountId, setAccountId] = useState('');
   const [file, setFile] = useState(null);
   const [statements, setStatements] = useState([]);
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [uploading, setUploading] = useState(false);
@@ -28,15 +33,16 @@ export default function StatementsLibrary() {
 
   const load = useCallback(async () => {
     try {
-      const data = await api.get('/statements');
-      setStatements(data);
+      const data = await api.get('/statements', { page, limit: PAGE_SIZE });
+      setStatements(data.items);
+      setTotal(data.total);
       setError('');
     } catch (err) {
       setError(err.message);
     } finally {
       setLoading(false);
     }
-  }, [live]);
+  }, [page, live]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -52,7 +58,13 @@ export default function StatementsLibrary() {
     try {
       const query = new URLSearchParams({ accountId, fileName: file.name });
       const created = await api.uploadPdf(`/statements/import?${query}`, file);
-      setStatements((current) => [created, ...current]);
+      // Show the new statement at the top. On page 1 prepend it; otherwise jump to page 1 where it lives.
+      if (page === 1) {
+        setStatements((current) => [created, ...current]);
+        setTotal((t) => t + 1);
+      } else {
+        setPage(1);
+      }
       setFile(null);
       setShowImport(false);
       form?.reset();
@@ -98,7 +110,7 @@ export default function StatementsLibrary() {
         <div className="card statement-blank"><span>⌁</span><h2>Your review workspace is ready</h2><p>Import a bank statement when you are ready to begin. Imported statements will appear here to open and review.</p></div>
       ) : (
         <>
-        <div className="statement-library-head"><h2>Imported statements</h2><span>{statements.length} statement{statements.length === 1 ? '' : 's'} · tap one to review</span></div>
+        <div className="statement-library-head"><h2>Imported statements</h2><span>{total} statement{total === 1 ? '' : 's'} · tap one to review</span></div>
         <div className="statement-library" role="list" aria-label="Imported statements">
           {statements.map((entry) => {
             // The list endpoint sends counts only; a just-uploaded statement still carries its full
@@ -119,6 +131,7 @@ export default function StatementsLibrary() {
             );
           })}
         </div>
+        <Pagination page={page} limit={PAGE_SIZE} total={total} onPage={setPage} />
         </>
       )}
     </>
