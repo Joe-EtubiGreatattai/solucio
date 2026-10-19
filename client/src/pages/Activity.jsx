@@ -3,6 +3,7 @@ import { api } from '../api';
 import { useLiveRefresh } from '../realtime/RealtimeProvider';
 import Field from '../components/Field';
 import TableWrap from '../components/TableWrap';
+import Pagination from '../components/Pagination';
 import { ACTIONS, actionLabel, describeActivity } from '../utils/activity';
 import { formatDateTime } from '../utils/dates';
 import { TableSkeleton } from '../components/Skeleton';
@@ -38,8 +39,6 @@ export default function Activity() {
     setPage(1);
   };
   const filtered = !!(filters.from || filters.to || filters.actorId || filters.action);
-  const start = (page - 1) * LIMIT + 1;
-  const end = Math.min(page * LIMIT, data.total);
 
   return (
     <>
@@ -94,13 +93,7 @@ export default function Activity() {
             </tbody>}
           </table>
         </TableWrap>
-        {data.total > 0 && (
-          <div className="row pager">
-            <span>{`Showing ${start}–${end} of ${data.total}`}</span>
-            <button type="button" className="secondary" disabled={page === 1} onClick={() => setPage(page - 1)}>Previous</button>
-            <button type="button" className="secondary" disabled={page * LIMIT >= data.total} onClick={() => setPage(page + 1)}>Next</button>
-          </div>
-        )}
+        <Pagination page={page} limit={LIMIT} total={data.total} onPage={setPage} />
       </div>
     </>
   );

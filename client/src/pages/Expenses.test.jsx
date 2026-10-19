@@ -44,6 +44,33 @@ test('record only: can record but never asks for the list', async () => {
   expect(api.get).not.toHaveBeenCalledWith('/expenses', expect.anything());
 });
 
+test('pages through a long list instead of fetching everything', async () => {
+  api.get.mockImplementation((path) => Promise.resolve(
+    path === '/accounts' ? [{ _id: 'a1', name: 'Main', type: 'cash' }]
+      : path === '/categories' ? [{ type: 'Recurrent', groups: [{ name: 'Staff Wages', items: [] }] }]
+        : { items: [row], total: 120, page: 1, limit: 50 }
+  ));
+  renderExpenses(['expenses.view']);
+  expect(await screen.findByText('Showing 1–50 of 120')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Previous' })).toBeDisabled();
+  await userEvent.click(screen.getByRole('button', { name: 'Next' }));
+  expect(api.get).toHaveBeenLastCalledWith('/expenses', expect.objectContaining({ page: 2, limit: 50 }));
+});
+
+test('changing a filter starts again from the first page', async () => {
+  api.get.mockImplementation((path) => Promise.resolve(
+    path === '/accounts' ? [{ _id: 'a1', name: 'Main', type: 'cash' }]
+      : path === '/categories' ? [{ type: 'Recurrent', groups: [{ name: 'Staff Wages', items: [] }] }]
+        : { items: [row], total: 120, page: 1, limit: 50 }
+  ));
+  renderExpenses(['expenses.view']);
+  await screen.findByText('Showing 1–50 of 120');
+  await userEvent.click(screen.getByRole('button', { name: 'Next' }));
+  expect(api.get).toHaveBeenLastCalledWith('/expenses', expect.objectContaining({ page: 2 }));
+  await userEvent.selectOptions(screen.getByLabelText('Status'), 'active');
+  expect(api.get).toHaveBeenLastCalledWith('/expenses', expect.objectContaining({ status: 'active', page: 1 }));
+});
+
 describe('filtering by category, group and item', () => {
   const richCategories = [{
     type: 'Recurrent',

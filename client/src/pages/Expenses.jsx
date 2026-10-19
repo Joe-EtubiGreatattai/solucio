@@ -8,12 +8,15 @@ import ExpenseForm from '../components/ExpenseForm';
 import VoidDialog from '../components/VoidDialog';
 import Field from '../components/Field';
 import TableWrap from '../components/TableWrap';
+import Pagination from '../components/Pagination';
 import { formatDate } from '../utils/dates';
 import { formatNaira } from '../utils/money';
 import { accountLabel } from '../utils/labels';
 import { downloadBlob } from '../utils/download';
 import { TableSkeleton } from '../components/Skeleton';
 import { useStoredState } from '../hooks/useStoredState';
+
+const PAGE_SIZE = 50;
 
 export default function Expenses() {
   const live = useLiveRefresh(['expenses']);
@@ -24,6 +27,7 @@ export default function Expenses() {
   const { accounts, error: accountsError } = useAccounts();
   const { categories, error: categoriesError } = useCategories();
   const [filters, setFilters] = useStoredState('solucio:expense-filters', { from: '', to: '', status: 'all', type: '', group: '', item: '' });
+  const [page, setPage] = useState(1);
   const [data, setData] = useState({ items: [], total: 0 });
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState('');
@@ -33,11 +37,11 @@ export default function Expenses() {
 
   const load = useCallback(() => {
     if (!canView) return;
-    api.get('/expenses', filters)
+    api.get('/expenses', { ...filters, page, limit: PAGE_SIZE })
       .then((d) => { setData(d); setError(''); })
       .catch((e) => setError(e.message))
       .finally(() => setLoaded(true));
-  }, [filters, canView, live]);
+  }, [filters, page, canView, live]);
   useEffect(load, [load]);
 
   // Drop a saved category filter that points at a type/group/item that no longer exists, so the list
@@ -67,10 +71,11 @@ export default function Expenses() {
     setVoidId(null);
     load();
   };
-  const setFilter = (k) => (e) => setFilters({ ...filters, [k]: e.target.value });
+  // Any filter change narrows the result set, so jump back to the first page of the new results.
+  const setFilter = (k) => (e) => { setFilters({ ...filters, [k]: e.target.value }); setPage(1); };
   // Type, group and item cascade like the record form: choosing a different level upstream clears what's below it.
-  const setTypeFilter = (e) => setFilters({ ...filters, type: e.target.value, group: '', item: '' });
-  const setGroupFilter = (e) => setFilters({ ...filters, group: e.target.value, item: '' });
+  const setTypeFilter = (e) => { setFilters({ ...filters, type: e.target.value, group: '', item: '' }); setPage(1); };
+  const setGroupFilter = (e) => { setFilters({ ...filters, group: e.target.value, item: '' }); setPage(1); };
   const filtered = !!(filters.from || filters.to || filters.type || filters.group || filters.item || filters.status !== 'all');
   const categoryPath = (e) => [e.type, e.group, e.item].filter(Boolean).join(' › ');
   const groupsForType = (categories.find((c) => c.type === filters.type) || {}).groups || [];
@@ -176,6 +181,7 @@ export default function Expenses() {
           </table>
           </TableWrap>
           {loaded && <p>{data.total} {data.total === 1 ? 'entry' : 'entries'}</p>}
+          <Pagination page={page} limit={PAGE_SIZE} total={data.total} onPage={setPage} />
         </div>
         </>
       ) : (

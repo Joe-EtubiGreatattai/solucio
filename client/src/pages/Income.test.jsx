@@ -29,6 +29,16 @@ beforeEach(() => {
   api.post.mockResolvedValue(saved);
 });
 
+test('pages through a long list instead of fetching everything', async () => {
+  const row = { _id: 'i9', receiptNumber: 'RCP-1', amount: 100000, method: 'transfer', date: '2026-09-20T23:00:00.000Z', account: { name: 'Main Operations', type: 'cash' }, voided: false };
+  api.get.mockImplementation((path) => Promise.resolve(path === '/accounts' ? accounts : { items: [row], total: 120, page: 1, limit: 50 }));
+  renderIncome(['income.view']);
+  expect(await screen.findByText('Showing 1–50 of 120')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Previous' })).toBeDisabled();
+  await userEvent.click(screen.getByRole('button', { name: 'Next' }));
+  expect(api.get).toHaveBeenLastCalledWith('/incomes', expect.objectContaining({ page: 2, limit: 50 }));
+});
+
 test('shows an alert when accounts fail to load', async () => {
   api.get.mockImplementation((path) => (path === '/accounts' ? Promise.reject(new Error('Accounts unavailable')) : Promise.resolve({ items: [], total: 0 })));
   renderIncome();

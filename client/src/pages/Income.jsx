@@ -8,6 +8,7 @@ import IncomeForm from '../components/IncomeForm';
 import VoidDialog from '../components/VoidDialog';
 import PaymentSuccess from '../components/PaymentSuccess';
 import TableWrap from '../components/TableWrap';
+import Pagination from '../components/Pagination';
 import Field from '../components/Field';
 import { viewReceipt } from '../utils/receipt';
 import { features } from '../features';
@@ -19,6 +20,7 @@ import { TableSkeleton } from '../components/Skeleton';
 import { useStoredState } from '../hooks/useStoredState';
 
 const METHOD = { transfer: 'Bank transfer', pos: 'POS', cash: 'Cash' };
+const PAGE_SIZE = 50;
 
 export default function Income() {
   const live = useLiveRefresh(['incomes']);
@@ -30,6 +32,7 @@ export default function Income() {
   const { categories } = useCategories('income');
   const categoryPath = (i) => [i.type, i.group, i.item].filter(Boolean).join(' › ');
   const [filters, setFilters] = useStoredState('solucio:income-filters', { from: '', to: '', status: 'all', method: '', accountId: '', type: '', group: '', item: '' });
+  const [page, setPage] = useState(1);
   const [data, setData] = useState({ items: [], total: 0 });
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState('');
@@ -40,11 +43,11 @@ export default function Income() {
 
   const load = useCallback(() => {
     if (!canView) return;
-    api.get('/incomes', filters)
+    api.get('/incomes', { ...filters, page, limit: PAGE_SIZE })
       .then((d) => { setData(d); setError(''); })
       .catch((e) => setError(e.message))
       .finally(() => setLoaded(true));
-  }, [filters, canView, live]);
+  }, [filters, page, canView, live]);
   useEffect(load, [load]);
 
   // A saved filter can point at an account or category that no longer exists (e.g. recreated data).
@@ -79,10 +82,11 @@ export default function Income() {
     setVoidId(null);
     load();
   };
-  const setFilter = (k) => (e) => setFilters({ ...filters, [k]: e.target.value });
+  // Any filter change narrows the result set, so jump back to the first page of the new results.
+  const setFilter = (k) => (e) => { setFilters({ ...filters, [k]: e.target.value }); setPage(1); };
   // Income category filter cascades like the record form: a higher level clears what's below it.
-  const setTypeFilter = (e) => setFilters({ ...filters, type: e.target.value, group: '', item: '' });
-  const setGroupFilter = (e) => setFilters({ ...filters, group: e.target.value, item: '' });
+  const setTypeFilter = (e) => { setFilters({ ...filters, type: e.target.value, group: '', item: '' }); setPage(1); };
+  const setGroupFilter = (e) => { setFilters({ ...filters, group: e.target.value, item: '' }); setPage(1); };
   const groupsForType = (categories.find((c) => c.type === filters.type) || {}).groups || [];
   const itemsForGroup = (groupsForType.find((g) => g.name === filters.group) || {}).items || [];
   const filtered = !!(filters.from || filters.to || filters.status !== 'all' || filters.method || filters.accountId || filters.type || filters.group || filters.item);
@@ -217,6 +221,7 @@ export default function Income() {
           </table>
           </TableWrap>
           {loaded && <p>{data.total} {data.total === 1 ? 'entry' : 'entries'}</p>}
+          <Pagination page={page} limit={PAGE_SIZE} total={data.total} onPage={setPage} />
         </div>
         </>
       ) : (
