@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { useAuth } from '../auth/AuthContext';
 import { visibleNav } from '../nav';
 import CommandPalette from './CommandPalette';
+import QueueWidget from './QueueWidget';
 import PasswordDialog from './PasswordDialog';
 import { api } from '../api';
 
@@ -57,10 +58,11 @@ export default function Layout({ children }) {
         </div>
       </aside>
       <div className="main-shell">
-        <header className="mobile-head"><div className="brand"><span className="brand-mark">S</span><span>solucio</span></div><div className="row"><button type="button" className="signout" onClick={() => setChangingPassword(true)} aria-label="Change password"><Icon name="key" /></button><span className="avatar">{user.name?.slice(0, 1).toUpperCase()}</span></div></header>
+        <header className="mobile-head"><div className="brand"><span className="brand-mark">S</span><span>solucio</span></div><div className="row"><QueueWidget /><button type="button" className="signout" onClick={() => setChangingPassword(true)} aria-label="Change password"><Icon name="key" /></button><span className="avatar">{user.name?.slice(0, 1).toUpperCase()}</span></div></header>
         <header className="workspace-head">
           <div><strong>Welcome back, {user.name?.split(' ')[0]}!</strong><span>Here is your payment workspace.</span></div>
           <CommandPalette />
+          <QueueWidget />
           <div className="workspace-user"><span className="avatar">{user.name?.slice(0, 1).toUpperCase()}</span><span><b>{user.name}</b><small>Solucio workspace</small></span></div>
         </header>
         <main>{notice && <p className="statement-notice" role="status">{notice} <button type="button" className="link" onClick={() => setNotice('')}>Dismiss</button></p>}{children}</main>

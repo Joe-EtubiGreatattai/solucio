@@ -128,3 +128,30 @@ body{font-size:15px}.side-nav a{font-size:13px}.workspace-head span{font-size:12
 .blocker-list li{margin:3px 0}
 .blocker-list em{font-style:normal;font-weight:700;text-transform:uppercase;font-size:9px;margin-right:6px}
 .fix-group{margin-bottom:6px}
+
+/* Background action queue (top-right widget) */
+.queue-widget{position:relative;display:flex;align-items:center}
+.queue-pill{background:var(--paper);color:var(--soft-ink);border:1px solid var(--line-strong);border-radius:999px;min-height:34px;padding:5px 12px;display:inline-flex;align-items:center;gap:8px;font-weight:600;font-size:13px}
+.queue-pill:hover:not(:disabled){background:var(--paper);box-shadow:var(--shadow);transform:none}
+.queue-widget.has-errors .queue-pill{border-color:var(--red);color:var(--red)}
+.queue-dot{width:9px;height:9px;border-radius:50%;background:var(--green);flex:none}
+.queue-dot.error{background:var(--red)}
+.queue-dot.spinning{background:transparent;border:2px solid var(--line-strong);border-top-color:var(--blue);animation:queue-spin .7s linear infinite}
+@keyframes queue-spin{to{transform:rotate(360deg)}}
+.queue-panel{position:absolute;top:calc(100% + 8px);right:0;width:320px;max-width:84vw;background:var(--paper);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);padding:10px;z-index:60}
+.queue-panel-head{font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);margin-bottom:6px}
+.queue-list{list-style:none;margin:0;padding:0;max-height:300px;overflow:auto;display:flex;flex-direction:column;gap:2px}
+.queue-item{display:flex;align-items:flex-start;gap:9px;padding:7px 6px;border-radius:8px;font-size:13px}
+.queue-item.error{background:rgba(196,58,66,.07)}
+.queue-item.done{color:var(--muted)}
+.queue-status{flex:none;width:18px;text-align:center;font-weight:700}
+.queue-status.running{color:var(--blue);animation:queue-spin .7s linear infinite;display:inline-block}
+.queue-status.done{color:var(--green)}
+.queue-status.error{color:var(--red)}
+.queue-item-label{flex:1;display:flex;flex-direction:column;line-height:1.3}
+.queue-item-label small{color:var(--red);font-size:11px}
+.queue-item-actions{display:inline-flex;gap:8px;flex:none}
+
+/* A row whose save is still running in the background queue */
+.statement-row.syncing{opacity:.72}
+.statement-row-sync{font-size:11px;font-weight:700;color:var(--blue);text-transform:uppercase;letter-spacing:.03em}

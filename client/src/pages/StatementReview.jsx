@@ -4,6 +4,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { api } from '../api';
 import { useLiveRefresh } from '../realtime/RealtimeProvider';
 import { useAuth } from '../auth/AuthContext';
+import { useActionQueue } from '../queue/ActionQueueProvider';
 import { formatDate } from '../utils/dates';
 import { formatNaira } from '../utils/money';
 import { Skeleton, TableSkeleton } from '../components/Skeleton';
@@ -11,13 +12,14 @@ import { categoryLabel, confidenceLabel, isIncluded } from './statementUtils';
 
 // A single transaction row. Memoized so that selecting or editing one row only repaints the rows that
 // actually changed, instead of every row in a statement that can run to hundreds or thousands of entries.
-const StatementRow = memo(function StatementRow({ entry, selected, review, onSelect, onToggle }) {
+const StatementRow = memo(function StatementRow({ entry, selected, review, syncing, onSelect, onToggle }) {
   return (
     <div
-      className={['statement-row', entry.direction, selected ? 'selected-row' : '', isIncluded(entry) ? '' : 'excluded'].filter(Boolean).join(' ')}
+      className={['statement-row', entry.direction, selected ? 'selected-row' : '', isIncluded(entry) ? '' : 'excluded', syncing ? 'syncing' : ''].filter(Boolean).join(' ')}
       role="button"
       tabIndex={0}
       aria-pressed={selected}
+      aria-busy={syncing || undefined}
       onClick={() => onSelect(entry._id)}
       onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onSelect(entry._id); } }}
     >
@@ -31,10 +33,11 @@ const StatementRow = memo(function StatementRow({ entry, selected, review, onSel
         </div>
       </div>
       <div className="statement-row-side">
+        {syncing && <span className="statement-row-sync" aria-label="Saving">Syncing…</span>}
         <span className={`statement-row-amount ${entry.direction}`}>{entry.direction === 'income' ? '+' : '−'}{formatNaira(entry.amount)}</span>
         {review ? (
           <label className="statement-row-keep" onClick={(event) => event.stopPropagation()}>
-            <input type="checkbox" checked={isIncluded(entry)} aria-label={`Import ${entry.narration}`} onChange={() => onToggle(entry)} />
+            <input type="checkbox" checked={isIncluded(entry)} disabled={syncing} aria-label={`Import ${entry.narration}`} onChange={() => onToggle(entry)} />
             <span>Import</span>
           </label>
         ) : (
@@ -51,8 +54,17 @@ export default function StatementReview() {
   const live = useLiveRefresh(['statements']);
   const categoriesLive = useLiveRefresh(['categories']);
   const { can } = useAuth();
+  const { enqueue } = useActionQueue();
   const [statement, setStatement] = useState(null);
   const [selectedTransactionId, setSelectedTransactionId] = useState('');
+  // Transactions whose save is still running in the background queue. Their rows show a "Syncing…" state
+  // and lock until the server confirms (we don't flip the row optimistically).
+  const [syncingIds, setSyncingIds] = useState(() => new Set());
+  const markSyncing = useCallback((txId, on) => setSyncingIds((current) => {
+    const next = new Set(current);
+    if (on) next.add(txId); else next.delete(txId);
+    return next;
+  }), []);
   const [categories, setCategories] = useState([]);
   const [incomeCategories, setIncomeCategories] = useState([]);
   const [error, setError] = useState('');
@@ -64,7 +76,6 @@ export default function StatementReview() {
   const [approveBlockers, setApproveBlockers] = useState(null);
   const [fixing, setFixing] = useState(false);
   const [rechecking, setRechecking] = useState(false);
-  const [markingReviewed, setMarkingReviewed] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
@@ -101,6 +112,8 @@ export default function StatementReview() {
   const reviewIndex = visibleTransactions.findIndex((entry) => entry._id === transaction?._id);
   // Whether the list rows show editable import checkboxes (review stage) or read-only labels (approved).
   const rowsAreReviewable = statement?.status === 'review' && can('statements.review');
+  // The open transaction is mid-save in the background queue: lock its controls until the server confirms.
+  const editorSyncing = transaction ? syncingIds.has(transaction._id) : false;
 
   useEffect(() => {
     const onKeyDown = (event) => {
@@ -124,24 +137,28 @@ export default function StatementReview() {
   // Stable across row edits (it only depends on the statement's id and the review-queue toggle), so the
   // memoized rows below keep their callback identity and don't all re-render when one row is clicked.
   const statementId = statement?._id;
-  const patchTransaction = useCallback(async (transactionId, changes) => {
-    if (!statementId) return;
-    try {
-      const updated = await api.patch(`/statements/${statementId}/transactions/${transactionId}`, changes);
-      setStatement(updated);
-      if (reviewOnly && changes.confidence === 'high') {
-        const next = updated.transactions.find((entry) => isIncluded(entry) && entry.confidence === 'needs-review');
-        setSelectedTransactionId(next?._id || '');
-      }
-      const similar = updated.similarUpdated || 0;
-      setNotice(similar ? `Transaction review saved. Also applied to ${similar} other transaction${similar === 1 ? '' : 's'} from the same payee.` : 'Transaction review saved.');
-      setError('');
-    } catch (err) {
-      setError(err.message);
-    }
-  }, [statementId, reviewOnly]);
-  const saveTransaction = (changes) => transaction && patchTransaction(transaction._id, changes);
-  const toggleInclude = useCallback((entry) => patchTransaction(entry._id, { included: !isIncluded(entry) }), [patchTransaction]);
+  // The save runs in the background queue instead of blocking the page: the row shows "Syncing…" and the
+  // reviewer can keep working (or leave the page) while it finishes. Not optimistic — the row only changes
+  // once the server confirms.
+  const patchTransaction = useCallback((transactionId, changes, label) => {
+    if (!statementId) return Promise.resolve();
+    markSyncing(transactionId, true);
+    return enqueue({
+      label: label || 'Saving transaction review',
+      run: () => api.patch(`/statements/${statementId}/transactions/${transactionId}`, changes),
+    })
+      .then((updated) => {
+        setStatement(updated);
+        const similar = updated.similarUpdated || 0;
+        setNotice(similar ? `Transaction review saved. Also applied to ${similar} other transaction${similar === 1 ? '' : 's'} from the same payee.` : 'Transaction review saved.');
+        setError('');
+        return updated;
+      })
+      .catch((err) => { setError(err.message); })
+      .finally(() => markSyncing(transactionId, false));
+  }, [statementId, enqueue, markSyncing]);
+  const saveTransaction = (changes, label) => transaction && patchTransaction(transaction._id, changes, label);
+  const toggleInclude = useCallback((entry) => patchTransaction(entry._id, { included: !isIncluded(entry) }, `${isIncluded(entry) ? 'Skip' : 'Import'}: ${entry.narration}`), [patchTransaction]);
   const selectRow = useCallback((rowId) => setSelectedTransactionId(rowId), []);
 
   // Bring in only the income rows, only the expenses, or everything — one click instead of one row at a time.
@@ -149,7 +166,7 @@ export default function StatementReview() {
     if (!statement) return;
     setBulkIncludeScope(scope);
     try {
-      const updated = await api.patch(`/statements/${statement._id}/include`, { scope });
+      const updated = await enqueue({ label: `Import: ${scope === 'all' ? 'everything' : `${scope} only`}`, run: () => api.patch(`/statements/${statement._id}/include`, { scope }) });
       setStatement(updated);
       setNotice(scope === 'all' ? 'Importing every transaction.' : `Only ${scope} transactions will be imported.`);
       setError('');
@@ -165,7 +182,7 @@ export default function StatementReview() {
     if (!statement) return;
     setRechecking(true);
     try {
-      const updated = await api.post(`/statements/${statement._id}/recategorize`);
+      const updated = await enqueue({ label: 'Re-checking categories', run: () => api.post(`/statements/${statement._id}/recategorize`) });
       setStatement(updated);
       const { checked, changed, needReview } = updated.recategorized;
       setNotice(`Re-checked ${checked} transactions: ${changed} updated, ${needReview} still need review.`);
@@ -182,7 +199,7 @@ export default function StatementReview() {
     if (!statement) return;
     setDeleting(true);
     try {
-      await api.delete(`/statements/${statement._id}`);
+      await enqueue({ label: `Delete: ${statement.fileName}`, run: () => api.delete(`/statements/${statement._id}`) });
       navigate('/statements');
     } catch (err) {
       setError(err.message);
@@ -195,7 +212,7 @@ export default function StatementReview() {
     if (!statement) return;
     setApproving(true);
     try {
-      const updated = await api.post(`/statements/${statement._id}/approve`);
+      const updated = await enqueue({ label: `Approve: ${statement.fileName}`, run: () => api.post(`/statements/${statement._id}/approve`) });
       setStatement(updated);
       setNotice('Statement approved. Its included transactions are now in your records.');
       setError('');
@@ -282,6 +299,7 @@ export default function StatementReview() {
                       entry={entry}
                       selected={transaction?._id === entry._id}
                       review={rowsAreReviewable}
+                      syncing={syncingIds.has(entry._id)}
                       onSelect={selectRow}
                       onToggle={toggleInclude}
                     />
@@ -293,32 +311,35 @@ export default function StatementReview() {
                 <div className="modal statement-editor-modal" onClick={closeEditor}>
                 <aside className="card transaction-editor" role="dialog" aria-modal="true" aria-label="Review transaction" onClick={(event) => event.stopPropagation()}>
                 <button type="button" className="modal-close" aria-label="Close" onClick={closeEditor}>×</button>
-                <div><p className="statement-eyebrow">REVIEWING TRANSACTION {reviewIndex >= 0 ? `${reviewIndex + 1} OF ${visibleTransactions.length}` : ''}</p><h2>{transaction.narration}</h2><p>{formatDate(transaction.date)} · {transaction.direction === 'income' ? 'Money in' : 'Money out'} · {formatNaira(transaction.amount)}</p>{transaction.reason && <p className="transaction-reason">Why: {transaction.reason}</p>}</div>
-                {statement.status === 'review' && can('statements.review') ? <div className="transaction-controls">
-                  <label className="field"><span>Treat as</span><select value={transaction.direction} onChange={(event) => saveTransaction({ direction: event.target.value, type: null, group: null, item: null, confidence: 'needs-review' })}><option value="income">Income</option><option value="expense">Expense</option></select></label>
+                <div><p className="statement-eyebrow">REVIEWING TRANSACTION {reviewIndex >= 0 ? `${reviewIndex + 1} OF ${visibleTransactions.length}` : ''}{editorSyncing ? ' · SYNCING…' : ''}</p><h2>{transaction.narration}</h2><p>{formatDate(transaction.date)} · {transaction.direction === 'income' ? 'Money in' : 'Money out'} · {formatNaira(transaction.amount)}</p>{transaction.reason && <p className="transaction-reason">Why: {transaction.reason}</p>}</div>
+                {statement.status === 'review' && can('statements.review') ? <div className="transaction-controls" aria-busy={editorSyncing || undefined}>
+                  <label className="field"><span>Treat as</span><select value={transaction.direction} disabled={editorSyncing} onChange={(event) => saveTransaction({ direction: event.target.value, type: null, group: null, item: null, confidence: 'needs-review' })}><option value="income">Income</option><option value="expense">Expense</option></select></label>
                   {transaction.direction === 'expense' && <>
-                    <label className="field"><span>Type</span><select value={transaction.type || selectedType?.type || ''} onChange={(event) => saveTransaction({ type: event.target.value, group: '', item: null, confidence: 'needs-review' })}>{categories.map((entry) => <option key={entry.type} value={entry.type}>{entry.type}</option>)}</select></label>
-                    <label className="field"><span>Group</span><select value={transaction.group || selectedGroup?.name || ''} onChange={(event) => saveTransaction({ type: selectedType?.type, group: event.target.value, item: null, confidence: 'needs-review' })}>{selectedType?.groups.map((entry) => <option key={entry.name} value={entry.name}>{entry.name}</option>)}</select></label>
-                    {selectedGroup?.items?.length > 0 && <label className="field"><span>Item</span><select value={transaction.item || ''} onChange={(event) => saveTransaction({ type: selectedType?.type, group: selectedGroup?.name, item: event.target.value, confidence: 'needs-review' })}><option value="">Choose item</option>{selectedGroup.items.map((entry) => <option key={entry} value={entry}>{entry}</option>)}</select></label>}
+                    <label className="field"><span>Type</span><select value={transaction.type || selectedType?.type || ''} disabled={editorSyncing} onChange={(event) => saveTransaction({ type: event.target.value, group: '', item: null, confidence: 'needs-review' })}>{categories.map((entry) => <option key={entry.type} value={entry.type}>{entry.type}</option>)}</select></label>
+                    <label className="field"><span>Group</span><select value={transaction.group || selectedGroup?.name || ''} disabled={editorSyncing} onChange={(event) => saveTransaction({ type: selectedType?.type, group: event.target.value, item: null, confidence: 'needs-review' })}>{selectedType?.groups.map((entry) => <option key={entry.name} value={entry.name}>{entry.name}</option>)}</select></label>
+                    {selectedGroup?.items?.length > 0 && <label className="field"><span>Item</span><select value={transaction.item || ''} disabled={editorSyncing} onChange={(event) => saveTransaction({ type: selectedType?.type, group: selectedGroup?.name, item: event.target.value, confidence: 'needs-review' })}><option value="">Choose item</option>{selectedGroup.items.map((entry) => <option key={entry} value={entry}>{entry}</option>)}</select></label>}
                   </>}
                   {transaction.direction === 'income' && incomeCategories.length > 0 && <>
-                    <label className="field"><span>Category (optional)</span><select value={transaction.type || ''} onChange={(event) => { const t = event.target.value; const firstGroup = incomeCategories.find((c) => c.type === t)?.groups?.[0]; saveTransaction({ type: t || null, group: t ? (firstGroup?.name || null) : null, item: null }); }}><option value="">No category</option>{incomeCategories.map((entry) => <option key={entry.type} value={entry.type}>{entry.type}</option>)}</select></label>
-                    {transaction.type && <label className="field"><span>Group</span><select value={transaction.group || selectedIncomeGroup?.name || ''} onChange={(event) => saveTransaction({ type: selectedIncomeType?.type, group: event.target.value, item: null })}>{selectedIncomeType?.groups.map((entry) => <option key={entry.name} value={entry.name}>{entry.name}</option>)}</select></label>}
-                    {transaction.type && selectedIncomeGroup?.items?.length > 0 && <label className="field"><span>Item</span><select value={transaction.item || ''} onChange={(event) => saveTransaction({ type: selectedIncomeType?.type, group: selectedIncomeGroup?.name, item: event.target.value })}><option value="">Choose item</option>{selectedIncomeGroup.items.map((entry) => <option key={entry} value={entry}>{entry}</option>)}</select></label>}
+                    <label className="field"><span>Category (optional)</span><select value={transaction.type || ''} disabled={editorSyncing} onChange={(event) => { const t = event.target.value; const firstGroup = incomeCategories.find((c) => c.type === t)?.groups?.[0]; saveTransaction({ type: t || null, group: t ? (firstGroup?.name || null) : null, item: null }); }}><option value="">No category</option>{incomeCategories.map((entry) => <option key={entry.type} value={entry.type}>{entry.type}</option>)}</select></label>
+                    {transaction.type && <label className="field"><span>Group</span><select value={transaction.group || selectedIncomeGroup?.name || ''} disabled={editorSyncing} onChange={(event) => saveTransaction({ type: selectedIncomeType?.type, group: event.target.value, item: null })}>{selectedIncomeType?.groups.map((entry) => <option key={entry.name} value={entry.name}>{entry.name}</option>)}</select></label>}
+                    {transaction.type && selectedIncomeGroup?.items?.length > 0 && <label className="field"><span>Item</span><select value={transaction.item || ''} disabled={editorSyncing} onChange={(event) => saveTransaction({ type: selectedIncomeType?.type, group: selectedIncomeGroup?.name, item: event.target.value })}><option value="">Choose item</option>{selectedIncomeGroup.items.map((entry) => <option key={entry} value={entry}>{entry}</option>)}</select></label>}
                   </>}
-                  <label className="check"><input type="checkbox" checked={isIncluded(transaction)} onChange={() => toggleInclude(transaction)} /><span>Import this transaction</span></label>
-                  <button type="button" disabled={markingReviewed} onClick={async () => {
-                    setMarkingReviewed(true);
-                    try {
-                      // Confirm the category that is actually shown. The expense Type/Group selects fall
-                      // back to the first option when nothing is stored, so persist those too — otherwise
-                      // the row would stay type/group-null and keep being flagged at approval.
-                      const changes = transaction.direction === 'expense'
-                        ? { type: selectedType?.type || null, group: selectedGroup?.name || null, item: (selectedGroup?.items || []).includes(transaction.item) ? transaction.item : null, confidence: 'high' }
-                        : { confidence: 'high' };
-                      await saveTransaction(changes);
-                    } finally { setMarkingReviewed(false); }
-                  }}>{markingReviewed ? 'Saving…' : 'Mark reviewed'}</button>
+                  <label className="check"><input type="checkbox" checked={isIncluded(transaction)} disabled={editorSyncing} onChange={() => toggleInclude(transaction)} /><span>Import this transaction</span></label>
+                  <button type="button" disabled={editorSyncing} onClick={() => {
+                    // Confirm the category that is actually shown. The expense Type/Group selects fall back to
+                    // the first option when nothing is stored, so persist those too — otherwise the row would
+                    // stay type/group-null and keep being flagged at approval.
+                    const changes = transaction.direction === 'expense'
+                      ? { type: selectedType?.type || null, group: selectedGroup?.name || null, item: (selectedGroup?.items || []).includes(transaction.item) ? transaction.item : null, confidence: 'high' }
+                      : { confidence: 'high' };
+                    saveTransaction(changes, `Mark reviewed: ${transaction.narration}`);
+                    // In the review-queue flow, move straight on to the next unreviewed row — the save
+                    // finishes in the background. Otherwise stay put so the row shows it syncing.
+                    if (reviewOnly) {
+                      const next = visibleTransactions.find((entry) => entry._id !== transaction._id && isIncluded(entry) && entry.confidence === 'needs-review');
+                      setSelectedTransactionId(next?._id || '');
+                    }
+                  }}>Mark reviewed</button>
                   <div className="review-navigation"><button type="button" className="secondary" disabled={reviewIndex <= 0} onClick={() => setSelectedTransactionId(visibleTransactions[reviewIndex - 1]._id)}>Previous</button><button type="button" className="secondary" disabled={reviewIndex >= visibleTransactions.length - 1} onClick={() => setSelectedTransactionId(visibleTransactions[reviewIndex + 1]._id)}>Next</button></div>
                 </div> : <span className="approved-lock">This statement is locked</span>}
                 </aside>

@@ -34,8 +34,11 @@ export default function StatementsLibrary() {
   const load = useCallback(async () => {
     try {
       const data = await api.get('/statements', { page, limit: PAGE_SIZE });
-      setStatements(data.items);
-      setTotal(data.total);
+      // Tolerate either the paginated shape ({ items, total }) or a bare array, so a backend on an older
+      // build can never leave the page blank.
+      const items = Array.isArray(data) ? data : (data?.items ?? []);
+      setStatements(items);
+      setTotal(Array.isArray(data) ? data.length : (data?.total ?? items.length));
       setError('');
     } catch (err) {
       setError(err.message);
