@@ -76,17 +76,18 @@ test('choosing an item also saves the shown type and group, never an item on its
   }));
 });
 
-test('Mark reviewed locks the editor while the save runs in the background queue', async () => {
+test('Mark reviewed hands the save to the queue and moves on immediately', async () => {
   let resolvePatch;
   api.patch.mockImplementation(() => new Promise((r) => { resolvePatch = r; }));
   renderPage();
   await waitForLoaded();
   await userEvent.click(screen.getAllByText('IBEDC PREPAID METER')[0]);
   await userEvent.click(screen.getByRole('button', { name: 'Mark reviewed' }));
-  // The row's save is queued; the editor is locked (syncing) until the server confirms.
-  expect(await screen.findByRole('button', { name: 'Mark reviewed' })).toBeDisabled();
+  // The editor closes at once (no blocking on the button) and the row shows it syncing in the background.
+  expect(screen.queryByRole('dialog', { name: 'Review transaction' })).toBeNull();
+  expect(await screen.findByText('Syncing…')).toBeInTheDocument();
   resolvePatch(withTransactions([{ ...expenseTx, confidence: 'high' }, incomeTx]));
-  expect(await screen.findByRole('button', { name: 'Mark reviewed' })).toBeEnabled();
+  await waitFor(() => expect(screen.queryByText('Syncing…')).toBeNull());
 });
 
 test('Mark reviewed on an uncategorised expense saves the shown type and group, not just confidence', async () => {

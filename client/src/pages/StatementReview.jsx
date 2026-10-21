@@ -333,12 +333,13 @@ export default function StatementReview() {
                       ? { type: selectedType?.type || null, group: selectedGroup?.name || null, item: (selectedGroup?.items || []).includes(transaction.item) ? transaction.item : null, confidence: 'high' }
                       : { confidence: 'high' };
                     saveTransaction(changes, `Mark reviewed: ${transaction.narration}`);
-                    // In the review-queue flow, move straight on to the next unreviewed row — the save
-                    // finishes in the background. Otherwise stay put so the row shows it syncing.
-                    if (reviewOnly) {
-                      const next = visibleTransactions.find((entry) => entry._id !== transaction._id && isIncluded(entry) && entry.confidence === 'needs-review');
-                      setSelectedTransactionId(next?._id || '');
-                    }
+                    // Hand the save to the background queue and move on at once — never block on this button.
+                    // In the review-queue flow, jump to the next unreviewed row; otherwise close the editor.
+                    // Either way the row itself shows "Syncing…" until the server confirms.
+                    const next = reviewOnly
+                      ? visibleTransactions.find((entry) => entry._id !== transaction._id && isIncluded(entry) && entry.confidence === 'needs-review')
+                      : null;
+                    setSelectedTransactionId(next?._id || '');
                   }}>Mark reviewed</button>
                   <div className="review-navigation"><button type="button" className="secondary" disabled={reviewIndex <= 0} onClick={() => setSelectedTransactionId(visibleTransactions[reviewIndex - 1]._id)}>Previous</button><button type="button" className="secondary" disabled={reviewIndex >= visibleTransactions.length - 1} onClick={() => setSelectedTransactionId(visibleTransactions[reviewIndex + 1]._id)}>Next</button></div>
                 </div> : <span className="approved-lock">This statement is locked</span>}
