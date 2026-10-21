@@ -2,6 +2,7 @@ const crypto = require('crypto');
 const express = require('express');
 const { z } = require('zod');
 const Statement = require('../models/Statement');
+const StatementSource = require('../models/StatementSource');
 const Account = require('../models/Account');
 const Income = require('../models/Income');
 const Expense = require('../models/Expense');
@@ -40,7 +41,10 @@ const lagosYear = (date) => new Date(date.getTime() + LAGOS_OFFSET_MS).getUTCFul
 router.use(authenticate);
 
 const present = (statement) => statement.toObject ? statement.toObject() : statement;
-const populated = (id) => Statement.findById(id).populate('account', 'name bankName accountNumber').populate('uploadedBy', 'name').populate('approvedBy', 'name');
+const REFS = [{ path: 'account', select: 'name bankName accountNumber' }, { path: 'uploadedBy', select: 'name' }, { path: 'approvedBy', select: 'name' }];
+// Populate the already-loaded (and just-saved) document instead of reading the whole statement back from
+// the database a second time just to return it.
+const presentPopulated = (statement) => statement.populate(REFS).then(present);
 
 // A person has already decided this row, so automatic categorization must leave it alone.
 const decidedByPerson = (t) => t.categorySource === 'reviewer' || (!t.categorySource && !!t.reviewedAt);
@@ -76,7 +80,7 @@ router.get('/', requirePermission('statements.view'), validate(listQuery, 'query
 }));
 
 router.get('/:id', requirePermission('statements.view'), asyncHandler(async (req, res) => {
-  const statement = await Statement.findById(req.params.id).populate('account', 'name bankName accountNumber').populate('uploadedBy', 'name').populate('approvedBy', 'name');
+  const statement = await Statement.findById(req.params.id).populate(REFS);
   if (!statement) throw new AppError(404, 'Statement not found');
   res.json(present(statement));
 }));
@@ -100,9 +104,11 @@ router.post('/import', requirePermission('statements.import'), express.raw({ typ
   const holderName = result.accountName || account.name;
   const results = categorizeTransactions(result.transactions, { ...(await loadCategorizerContext()), ownerName: holderName });
   const transactions = result.transactions.map((transaction, i) => ({ ...transaction, ...results[i] }));
-  const statement = await Statement.create({ account: account._id, fileName, holderName, sourcePdf: req.body, uploadedBy: req.user._id, transactions });
+  const statement = await Statement.create({ account: account._id, fileName, holderName, uploadedBy: req.user._id, transactions });
+  // The raw PDF is kept out of the statement document (see StatementSource) so the statement stays small.
+  await StatementSource.create({ statement: statement._id, mimeType: 'application/pdf', data: req.body });
   await logAudit({ actor: req.user._id, action: 'statement.import', targetModel: 'Statement', targetId: statement._id, details: { fileName, account: account.name, transactions: result.transactions.length, pages: result.pageCount, checksum: crypto.createHash('sha256').update(req.body).digest('hex').slice(0, 12) } });
-  res.status(201).json(present(await Statement.findById(statement._id).populate('account', 'name bankName accountNumber').populate('uploadedBy', 'name')));
+  res.status(201).json(await presentPopulated(statement));
 }));
 
 router.patch('/:id/transactions/:transactionId', requirePermission('statements.review'), validate(updateBody), asyncHandler(async (req, res) => {
@@ -150,7 +156,7 @@ router.patch('/:id/transactions/:transactionId', requirePermission('statements.r
   }
   await statement.save();
   await logAudit({ actor: req.user._id, action: 'statement.review', targetModel: 'Statement', targetId: statement._id, details: { fileName: statement.fileName, transaction: transaction.narration, category: [transaction.type, transaction.group, transaction.item].filter(Boolean).join(' › '), similarUpdated } });
-  res.json({ ...present(await populated(statement._id)), similarUpdated });
+  res.json({ ...(await presentPopulated(statement)), similarUpdated });
 }));
 
 // One click to keep only the income rows, only the expense rows, or bring everything back.
@@ -166,7 +172,7 @@ router.patch('/:id/include', requirePermission('statements.review'), validate(in
   }
   await statement.save();
   await logAudit({ actor: req.user._id, action: 'statement.bulk-include', targetModel: 'Statement', targetId: statement._id, details: { fileName: statement.fileName, scope, changed } });
-  res.json(present(await Statement.findById(statement._id).populate('account', 'name bankName accountNumber').populate('uploadedBy', 'name').populate('approvedBy', 'name')));
+  res.json(await presentPopulated(statement));
 }));
 
 // Re-run categorization on rows nobody has decided yet, using the current category tree and everything
@@ -191,7 +197,7 @@ router.post('/:id/recategorize', requirePermission('statements.review'), asyncHa
   const needReview = statement.transactions.filter((transaction) => transaction.included !== false && transaction.confidence === 'needs-review').length;
   const recategorized = { checked: targets.length, changed, needReview };
   await logAudit({ actor: req.user._id, action: 'statement.recategorize', targetModel: 'Statement', targetId: statement._id, details: { fileName: statement.fileName, ...recategorized } });
-  res.json({ ...present(await populated(statement._id)), recategorized });
+  res.json({ ...(await presentPopulated(statement)), recategorized });
 }));
 
 // Discard a statement that is still in review (a wrong file, a duplicate upload). Approved statements stay:
@@ -203,6 +209,7 @@ router.delete('/:id', requirePermission('statements.approve'), asyncHandler(asyn
     throw new AppError(409, 'Approved statements cannot be deleted because their transactions are already in your records. Void those records instead.');
   }
   await statement.deleteOne();
+  await StatementSource.deleteOne({ statement: statement._id });
   await logAudit({
     actor: req.user._id, action: 'statement.delete', targetModel: 'Statement', targetId: statement._id,
     details: { fileName: statement.fileName, account: statement.account?.name, transactions: statement.transactions.length },
@@ -289,7 +296,7 @@ router.post('/:id/approve', requirePermission('statements.approve'), asyncHandle
     actor: req.user._id, action: 'statement.approve', targetModel: 'Statement', targetId: statement._id,
     details: { fileName: statement.fileName, transactions: statement.transactions.length, posted: included.length },
   });
-  res.json(present(await Statement.findById(statement._id).populate('account', 'name bankName accountNumber').populate('uploadedBy', 'name').populate('approvedBy', 'name')));
+  res.json(await presentPopulated(statement));
 }));
 
 module.exports = router;

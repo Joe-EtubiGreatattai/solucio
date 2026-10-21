@@ -34,8 +34,8 @@ const statementSchema = new Schema(
     fileName: { type: String, required: true, trim: true },
     // The account holder's name as printed on the statement, used to spot transfers between their own accounts.
     holderName: { type: String, trim: true },
-    mimeType: { type: String, default: 'application/pdf' },
-    sourcePdf: { type: Buffer, select: false },
+    // The raw uploaded PDF is kept in the StatementSource collection, not here, so this document stays
+    // small and cheap to read and re-save on every review action.
     status: { type: String, enum: ['review', 'approved'], default: 'review' },
     uploadedBy: { type: Schema.Types.ObjectId, ref: 'User', required: true },
     approvedBy: { type: Schema.Types.ObjectId, ref: 'User' },
