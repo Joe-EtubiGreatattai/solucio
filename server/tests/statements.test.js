@@ -150,6 +150,35 @@ describe('approving posts real records', () => {
     expect(await AuditLog.findOne({ action: 'income.create', targetId: incomes[0]._id })).toBeTruthy();
   });
 
+  test('a large statement approves in a few batched writes, with unique receipts per year', async () => {
+    // Approving used to post every row with its own sequential receipt bump, insert and audit write,
+    // so a statement with thousands of rows ran for over a minute and the gateway timed out (504).
+    // Batching must still produce exactly one record per row, unique sequential receipts namespaced by
+    // the transaction's year, and one audit entry per created record.
+    const rows = [];
+    for (let i = 0; i < 6; i += 1) rows.push(incomeRow({ amount: 100000 + i, date: new Date('2026-03-10T00:00:00Z') }));
+    for (let i = 0; i < 4; i += 1) rows.push(incomeRow({ amount: 200000 + i, date: new Date('2025-11-10T00:00:00Z') }));
+    for (let i = 0; i < 5; i += 1) rows.push(expenseRow({ amount: 300000 + i }));
+    const statement = await makeStatement(rows);
+
+    const approved = await request(app).post(`/api/statements/${statement.id}/approve`).set(auth(admin.token));
+    expect(approved.status).toBe(200);
+    expect(await Income.countDocuments()).toBe(10);
+    expect(await Expense.countDocuments()).toBe(5);
+
+    // Every posted transaction carries the id of the record it created.
+    expect(approved.body.transactions.filter((t) => t.postedId)).toHaveLength(15);
+
+    const receipts = (await Income.find()).map((i) => i.receiptNumber);
+    expect(new Set(receipts).size).toBe(10); // all unique
+    expect(receipts.filter((r) => /^RCP-2026-\d{4}$/.test(r))).toHaveLength(6);
+    expect(receipts.filter((r) => /^RCP-2025-\d{4}$/.test(r))).toHaveLength(4);
+
+    // A per-record audit entry still survives the batching.
+    expect(await AuditLog.countDocuments({ action: 'income.create' })).toBe(10);
+    expect(await AuditLog.countDocuments({ action: 'expense.create' })).toBe(5);
+  });
+
   test('an excluded row is skipped: no record, no review requirement, does not block approval', async () => {
     const statement = await makeStatement([
       expenseRow({ included: false, confidence: 'needs-review', type: undefined, group: undefined, item: undefined }),

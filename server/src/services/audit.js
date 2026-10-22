@@ -8,4 +8,20 @@ async function logAudit({ actor, action, targetModel, targetId, details }) {
   return log;
 }
 
-module.exports = { logAudit };
+// Write many audit entries in one insert, then signal the live screens once per affected model instead
+// of once per row. Approving a statement can create hundreds of records at once; emitting a socket event
+// per record (and inserting them one at a time) is a needless storm and a big part of what made approval
+// slow enough to time out.
+async function logAuditBatch(entries) {
+  if (!entries.length) return [];
+  const logs = await AuditLog.insertMany(entries);
+  const signalled = new Set();
+  for (const entry of entries) {
+    if (signalled.has(entry.targetModel)) continue;
+    signalled.add(entry.targetModel);
+    notifyAudit({ action: entry.action, targetModel: entry.targetModel, targetId: entry.targetId });
+  }
+  return logs;
+}
+
+module.exports = { logAudit, logAuditBatch };

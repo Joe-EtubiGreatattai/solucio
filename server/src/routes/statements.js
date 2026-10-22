@@ -13,8 +13,8 @@ const AppError = require('../utils/AppError');
 const { objectId } = require('../utils/schemas');
 const { extractTransactions } = require('../services/statementParser');
 const { categorizeTransactions, loadCategorizerContext, payeeOf, isBankCharge } = require('../services/statementCategorizer');
-const { logAudit } = require('../services/audit');
-const { nextReceiptNumber } = require('../services/receiptNumber');
+const { logAudit, logAuditBatch } = require('../services/audit');
+const { reserveReceipts } = require('../services/receiptNumber');
 const { classifyAgainstTree, getTree, assertValidCategory } = require('../services/categories');
 
 const router = express.Router();
@@ -259,34 +259,60 @@ router.post('/:id/approve', requirePermission('statements.approve'), asyncHandle
   const account = await Account.findById(statement.account);
   if (!account || !account.active) throw new AppError(400, 'The account for this statement is no longer active.');
 
-  for (const transaction of included) {
-    if (transaction.direction === 'income') {
-      const receiptNumber = await nextReceiptNumber(String(lagosYear(transaction.date)));
-      const income = await Income.create({
-        amount: transaction.amount, date: transaction.date, method: 'transfer', account: account._id,
-        receiptNumber, recordedBy: req.user._id,
-        type: transaction.type || null, group: transaction.group || null, item: transaction.item || null,
-      });
-      await logAudit({
-        actor: req.user._id, action: 'income.create', targetModel: 'Income', targetId: income._id,
-        details: { receiptNumber, amount: transaction.amount, source: 'statement', fileName: statement.fileName },
-      });
-      transaction.postedModel = 'Income';
-      transaction.postedId = income._id;
-    } else {
-      const expense = await Expense.create({
-        amount: transaction.amount, date: transaction.date, account: account._id,
-        type: transaction.type, group: transaction.group, item: transaction.item || null,
-        note: `Imported from ${statement.fileName}`, recordedBy: req.user._id,
-      });
-      await logAudit({
-        actor: req.user._id, action: 'expense.create', targetModel: 'Expense', targetId: expense._id,
-        details: { amount: transaction.amount, type: transaction.type, group: transaction.group, item: transaction.item || null, source: 'statement', fileName: statement.fileName },
-      });
-      transaction.postedModel = 'Expense';
-      transaction.postedId = expense._id;
-    }
+  // Post every included row in a few batched writes rather than thousands of sequential ones. A statement
+  // can carry thousands of transactions; creating each record, its receipt number and its audit entry one
+  // at a time ran for over a minute and the gateway timed out (504). We reserve receipt numbers a year's
+  // worth at a time, bulk-insert the income and expense records, then write their audit entries in one go.
+  const incomeTx = included.filter((transaction) => transaction.direction === 'income');
+  const expenseTx = included.filter((transaction) => transaction.direction !== 'income');
+
+  // Reserve a block of receipt numbers for each year the income rows fall in (usually just one), then
+  // hand them out in order.
+  const countByYear = new Map();
+  for (const transaction of incomeTx) {
+    const year = String(lagosYear(transaction.date));
+    countByYear.set(year, (countByYear.get(year) || 0) + 1);
   }
+  const receiptsByYear = new Map();
+  for (const [year, count] of countByYear) {
+    receiptsByYear.set(year, { numbers: await reserveReceipts(year, count), next: 0 });
+  }
+
+  const incomeDocs = incomeTx.map((transaction) => {
+    const slot = receiptsByYear.get(String(lagosYear(transaction.date)));
+    const receiptNumber = slot.numbers[slot.next];
+    slot.next += 1;
+    return {
+      amount: transaction.amount, date: transaction.date, method: 'transfer', account: account._id,
+      receiptNumber, recordedBy: req.user._id,
+      type: transaction.type || null, group: transaction.group || null, item: transaction.item || null,
+    };
+  });
+  const expenseDocs = expenseTx.map((transaction) => ({
+    amount: transaction.amount, date: transaction.date, account: account._id,
+    type: transaction.type, group: transaction.group, item: transaction.item || null,
+    note: `Imported from ${statement.fileName}`, recordedBy: req.user._id,
+  }));
+
+  const [createdIncome, createdExpense] = await Promise.all([
+    incomeDocs.length ? Income.insertMany(incomeDocs) : [],
+    expenseDocs.length ? Expense.insertMany(expenseDocs) : [],
+  ]);
+
+  // insertMany preserves order, so each created record lines up with the transaction that produced it.
+  incomeTx.forEach((transaction, i) => { transaction.postedModel = 'Income'; transaction.postedId = createdIncome[i]._id; });
+  expenseTx.forEach((transaction, i) => { transaction.postedModel = 'Expense'; transaction.postedId = createdExpense[i]._id; });
+
+  await logAuditBatch([
+    ...createdIncome.map((income) => ({
+      actor: req.user._id, action: 'income.create', targetModel: 'Income', targetId: income._id,
+      details: { receiptNumber: income.receiptNumber, amount: income.amount, source: 'statement', fileName: statement.fileName },
+    })),
+    ...createdExpense.map((expense) => ({
+      actor: req.user._id, action: 'expense.create', targetModel: 'Expense', targetId: expense._id,
+      details: { amount: expense.amount, type: expense.type, group: expense.group, item: expense.item || null, source: 'statement', fileName: statement.fileName },
+    })),
+  ]);
 
   statement.status = 'approved';
   statement.approvedBy = req.user._id;
