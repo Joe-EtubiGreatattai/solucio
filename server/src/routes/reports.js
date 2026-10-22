@@ -41,6 +41,12 @@ router.get('/cash-flow', requirePermission('reports.view'), validate(rangeQuery,
   res.json(await reports.cashFlow(from, to, accountId));
 }));
 
+// Everything the Reports page shows, in one request: spending, income and cash flow together.
+router.get('/overview', requirePermission('reports.view'), validate(rangeQuery, 'query'), asyncHandler(async (req, res) => {
+  const { from, to, accountId } = req.validated.query;
+  res.json(await reports.overview(from, to, accountId));
+}));
+
 const exportQuery = z
   .object({
     type: z.enum(['income', 'expenses', 'summary']),

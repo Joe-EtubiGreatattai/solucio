@@ -131,6 +131,38 @@ describe('income by category', () => {
   });
 });
 
+describe('the combined report overview', () => {
+  test('returns spending, income and cash flow identical to the separate reports', async () => {
+    // The Reports page used to fire three requests (spending, income, cash flow) and the server
+    // recomputed the shared pieces. One /overview request must return exactly what the three return.
+    const d = '2026-07-15T10:00:00Z';
+    await makeExpense({ ...ctx(), amount: 80000, date: d, type: 'Recurrent', group: 'Staff Wages' });
+    await makeIncome({ ...ctx(), amount: 300000, date: d, type: 'Diagnostics', group: 'Laboratory' });
+    await makeIncome({ ...ctx(), amount: 100000, date: d }); // uncategorized
+
+    const q = 'from=2026-07-01&to=2026-07-31';
+    const overview = (await get(`/overview?${q}`)).body;
+    expect(overview.spending).toEqual((await get(`/spending-by-category?${q}`)).body);
+    expect(overview.income).toEqual((await get(`/income-by-category?${q}`)).body);
+    expect(overview.cashFlow).toEqual((await get(`/cash-flow?${q}`)).body);
+  });
+
+  test('is gated by reports.view and validates the range', async () => {
+    const cashier = await createUser('cashier');
+    expect((await request(app).get('/api/reports/overview?from=2026-01-01&to=2026-01-02').set(auth(cashier.token))).status).toBe(403);
+    expect((await get('/overview?from=2026-02-02&to=2026-02-01')).status).toBe(400);
+  });
+
+  test('scopes every section to accountId', async () => {
+    const b = await makeAccount({ name: 'Bank B' });
+    await makeExpense({ ...ctx(), amount: 40000, date: '2026-08-10T10:00:00Z', type: 'Recurrent', group: 'Staff Wages' });
+    await makeExpense({ account: b, recordedBy: accountant.user, amount: 90000, date: '2026-08-10T10:00:00Z', type: 'Recurrent', group: 'Staff Wages' });
+    const { body } = await get(`/overview?from=2026-08-01&to=2026-08-31&accountId=${account.id}`);
+    expect(body.spending.grandTotal).toBe(40000);
+    expect(body.cashFlow.totals.expenses).toBe(40000);
+  });
+});
+
 describe('filtering reports by account', () => {
   const { spendingByCategory, incomeByCategory, cashFlow } = require('../src/services/reports');
 

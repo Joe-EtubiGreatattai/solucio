@@ -28,6 +28,7 @@ export default function Reports() {
   const scopedAccount = accounts.find((a) => a._id === scopeId);
   const [report, setReport] = useState(null);
   const [income, setIncome] = useState(null);
+  const [cashFlow, setCashFlow] = useState(null);
   const [error, setError] = useState('');
   const [exportType, setExportType] = useState('summary');
   const [format, setFormat] = useState('xlsx');
@@ -37,9 +38,11 @@ export default function Reports() {
     if (!range.from || !range.to) return;
     let ignore = false;
     const query = { ...range, ...(scopeId ? { accountId: scopeId } : {}) };
-    setReport(null); setIncome(null);
-    Promise.all([api.get('/reports/spending-by-category', query), api.get('/reports/income-by-category', query)])
-      .then(([spending, incomeCats]) => { if (!ignore) { setReport(spending); setIncome(incomeCats); setError(''); } })
+    setReport(null); setIncome(null); setCashFlow(null);
+    // One request for the whole page: spending, income and cash flow together (the server computes the
+    // shared pieces once). Fewer round-trips is the main thing that makes this page feel fast.
+    api.get('/reports/overview', query)
+      .then((data) => { if (!ignore) { setReport(data.spending); setIncome(data.income); setCashFlow(data.cashFlow); setError(''); } })
       .catch((e) => { if (!ignore) setError(e.message); });
     return () => { ignore = true; };
   }, [range, scopeId, live]);
@@ -103,7 +106,7 @@ export default function Reports() {
         </details>
       )}
 
-      <CashFlowAnalysis range={range} accountId={scopeId} />
+      <CashFlowAnalysis range={range} accountId={scopeId} data={cashFlow} error={error} />
 
       <h2>Spending by category</h2>
       {!report && !error && <div className="card report-skeleton"><Skeleton /><Skeleton /><Skeleton /></div>}

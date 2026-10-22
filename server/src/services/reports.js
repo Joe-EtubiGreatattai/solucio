@@ -163,7 +163,7 @@ const changePct = (curr, prev) => {
 
 // A fuller picture for the Reports page: a trend series with a running cash balance, this period
 // against the one before it, a simple burn-rate/runway estimate, and the biggest drivers of the numbers.
-async function cashFlow(from, to, accountId) {
+async function cashFlow(from, to, accountId, precomputed = {}) {
   const match = rangeMatch(from, to, accountId);
   const [income, expenses, incomeByDay, expenseByDay] = await Promise.all([
     totalFor(Income, match),
@@ -191,11 +191,15 @@ async function cashFlow(from, to, accountId) {
   const net = income.total - expenses.total;
   const prevNet = prevIncome.total - prevExpenses.total;
 
-  const cashOnHand = (await accountBalances(to, accountId)).grandTotal;
+  // Cash on hand at the end of the range is the opening balance plus this period's net — no need to
+  // scan the whole history a second time (the opening-balance scan above already did that work).
+  const cashOnHand = startingCash + net;
   const avgDailyNet = Math.round(net / numDays);
   const runwayDays = avgDailyNet < 0 ? (cashOnHand > 0 ? Math.floor(cashOnHand / Math.abs(avgDailyNet)) : 0) : null;
 
-  const byCategory = await spendingByCategory(from, to, accountId);
+  // The combined overview computes spending-by-category once and hands it in, so cash flow doesn't
+  // repeat that aggregation. Standalone callers still get it computed here.
+  const byCategory = (await precomputed.spending) || await spendingByCategory(from, to, accountId);
   const topOutflows = byCategory.types
     .flatMap((t) => t.groups.map((g) => ({ type: t.type, group: g.group, total: g.total, percent: g.percent })))
     .sort((a, b) => b.total - a.total)
@@ -219,4 +223,17 @@ async function cashFlow(from, to, accountId) {
   };
 }
 
-module.exports = { summary, spendingByCategory, incomeByCategory, accountBalances, cashFlow };
+// Everything the Reports page needs in one request. Spending-by-category is computed once and shared
+// with cash flow (which needs it for top outflows), so the page costs one round-trip and the server
+// runs the heavy spending aggregation a single time instead of twice.
+async function overview(from, to, accountId) {
+  const spending = spendingByCategory(from, to, accountId);
+  const [spendingResult, income, cash] = await Promise.all([
+    spending,
+    incomeByCategory(from, to, accountId),
+    cashFlow(from, to, accountId, { spending }),
+  ]);
+  return { spending: spendingResult, income, cashFlow: cash };
+}
+
+module.exports = { summary, spendingByCategory, incomeByCategory, accountBalances, cashFlow, overview };

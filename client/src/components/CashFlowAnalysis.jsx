@@ -33,20 +33,28 @@ const bucketLabel = (date, bucket) => {
   return `${d}/${m}`;
 };
 
-export default function CashFlowAnalysis({ range, accountId = '' }) {
+// The Reports page fetches the whole report in one request and hands the cash-flow slice in via `data`
+// (and any load error via `error`). Used on its own without those props, the component still fetches
+// its own cash-flow report, so it stays usable in isolation.
+export default function CashFlowAnalysis({ range, accountId = '', data: dataProp, error: errorProp }) {
+  const controlled = dataProp !== undefined;
   const live = useLiveRefresh(['reports']);
-  const [data, setData] = useState(null);
-  const [error, setError] = useState('');
+  const [fetched, setFetched] = useState(null);
+  const [fetchError, setFetchError] = useState('');
 
   useEffect(() => {
+    if (controlled) return undefined; // the parent supplies the data
     if (!range.from || !range.to) return undefined;
     let ignore = false;
-    setData(null);
+    setFetched(null);
     api.get('/reports/cash-flow', { ...range, ...(accountId ? { accountId } : {}) })
-      .then((next) => { if (!ignore) { setData(next); setError(''); } })
-      .catch((e) => { if (!ignore) setError(e.message); });
+      .then((next) => { if (!ignore) { setFetched(next); setFetchError(''); } })
+      .catch((e) => { if (!ignore) setFetchError(e.message); });
     return () => { ignore = true; };
-  }, [range, accountId, live]);
+  }, [range, accountId, live, controlled]);
+
+  const data = controlled ? dataProp : fetched;
+  const error = controlled ? errorProp : fetchError;
 
   if (error) return <p className="error" role="alert">{error}</p>;
   if (!data) return <div className="card cash-flow-skeleton"><Skeleton /><Skeleton /><Skeleton /></div>;

@@ -15,7 +15,7 @@ const renderReports = (perms) =>
     </AuthContext.Provider>
   );
 
-// The page asks for two things: the spending breakdown and the cash-flow analysis.
+// The page asks the server for everything it shows in one /reports/overview request.
 const emptyCashFlow = {
   range: { from: '', to: '' }, bucket: 'day', series: [],
   totals: { income: 0, expenses: 0, net: 0, cashOnHand: 0 },
@@ -24,11 +24,16 @@ const emptyCashFlow = {
   burnRate: { avgDailyNet: 0, runwayDays: null },
   topOutflows: [], incomeByMethod: [],
 };
+const emptyOverview = {
+  spending: { grandTotal: 0, types: [] },
+  income: { grandTotal: 0, uncategorized: 0, types: [] },
+  cashFlow: emptyCashFlow,
+};
 beforeEach(() => {
   vi.clearAllMocks();
   api.get.mockImplementation((path) => {
     if (path === '/accounts') return Promise.resolve([]);
-    return Promise.resolve(path === '/reports/cash-flow' ? emptyCashFlow : { grandTotal: 0, types: [] });
+    return Promise.resolve(path === '/reports/overview' ? emptyOverview : { grandTotal: 0, types: [] });
   });
 });
 
@@ -45,7 +50,7 @@ test('a role that can view but not export gets no export controls', async () => 
 
 test('the report refreshes when income, expenses or accounts change', async () => {
   const { socket } = renderLive(<Reports />, { auth: { can: () => true } });
-  const calls = () => api.get.mock.calls.filter((c) => c[0] === '/reports/spending-by-category').length;
+  const calls = () => api.get.mock.calls.filter((c) => c[0] === '/reports/overview').length;
   await waitFor(() => expect(calls()).toBe(1));
   act(() => socket.fire('data:changed', { resource: 'reports', action: 'create', id: 'x' }));
   await waitFor(() => expect(calls()).toBe(2));
@@ -65,7 +70,7 @@ describe('filtering reports by bank/account', () => {
   test('a super-user with accounts.manage but not the admin role still gets the filter', async () => {
     api.get.mockImplementation((path) => {
       if (path === '/accounts') return Promise.resolve([account]);
-      return Promise.resolve(path === '/reports/cash-flow' ? emptyCashFlow : { grandTotal: 0, types: [] });
+      return Promise.resolve(path === '/reports/overview' ? emptyOverview : { grandTotal: 0, types: [] });
     });
     renderLive(<Reports />, { auth: { can: (p) => p === 'accounts.manage', isAdmin: false } });
     expect(await screen.findByLabelText('Bank / account')).toBeInTheDocument();
@@ -74,14 +79,13 @@ describe('filtering reports by bank/account', () => {
   test('an admin can scope every report to one account', async () => {
     api.get.mockImplementation((path) => {
       if (path === '/accounts') return Promise.resolve([account]);
-      return Promise.resolve(path === '/reports/cash-flow' ? emptyCashFlow : { grandTotal: 0, types: [] });
+      return Promise.resolve(path === '/reports/overview' ? emptyOverview : { grandTotal: 0, types: [] });
     });
     renderAdmin();
     const select = await screen.findByLabelText('Bank / account');
     await act(async () => { await userEvent.selectOptions(select, 'a1'); });
     await waitFor(() => expect(
-      api.get.mock.calls.some((c) => c[0] === '/reports/spending-by-category' && c[1]?.accountId === 'a1'),
+      api.get.mock.calls.some((c) => c[0] === '/reports/overview' && c[1]?.accountId === 'a1'),
     ).toBe(true));
-    expect(api.get.mock.calls.some((c) => c[0] === '/reports/cash-flow' && c[1]?.accountId === 'a1')).toBe(true);
   });
 });
