@@ -56,6 +56,53 @@ test('the report refreshes when income, expenses or accounts change', async () =
   await waitFor(() => expect(calls()).toBe(2));
 });
 
+describe('drilling into a spending category', () => {
+  const withItems = {
+    spending: {
+      grandTotal: 100000,
+      types: [{
+        type: 'Recurrent', total: 100000, percent: 100,
+        groups: [{
+          group: 'Hospital Consumables', total: 100000, percent: 100,
+          items: [
+            { item: 'Oxygen', total: 60000, percent: 60 },
+            { item: 'Drugs', total: 40000, percent: 40 },
+          ],
+        }],
+      }],
+    },
+    income: { grandTotal: 0, uncategorized: 0, types: [] },
+    cashFlow: emptyCashFlow,
+  };
+  const mockWithItems = () => api.get.mockImplementation((path) => {
+    if (path === '/accounts') return Promise.resolve([]);
+    return Promise.resolve(path === '/reports/overview' ? withItems : { grandTotal: 0, types: [] });
+  });
+  const renderWith = (auth) => render(
+    <AuthContext.Provider value={{ can: () => true, permissions: ['reports.view'], user: { name: 'Ada', role: 'x' }, ...auth }}>
+      <Reports />
+    </AuthContext.Provider>
+  );
+
+  test('an admin can click a category to reveal its sub-items', async () => {
+    mockWithItems();
+    renderWith({ isAdmin: true });
+    const row = await screen.findByRole('button', { name: /Hospital Consumables/ });
+    expect(screen.queryByText('Oxygen')).toBeNull(); // collapsed by default
+    await userEvent.click(row);
+    expect(screen.getByText('Oxygen')).toBeInTheDocument();
+    expect(screen.getByText('Drugs')).toBeInTheDocument();
+  });
+
+  test('non-admins see the category but cannot expand it', async () => {
+    mockWithItems();
+    renderWith({ isAdmin: false, can: () => false });
+    expect(await screen.findByText(/Hospital Consumables/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Hospital Consumables/ })).toBeNull();
+    expect(screen.queryByText('Oxygen')).toBeNull();
+  });
+});
+
 describe('filtering reports by bank/account', () => {
   const account = { _id: 'a1', name: 'Main Operations', type: 'bank', bankName: 'GTBank' };
 

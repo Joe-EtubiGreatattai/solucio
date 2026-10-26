@@ -13,6 +13,52 @@ import { Skeleton } from '../components/Skeleton';
 import { useStoredState } from '../hooks/useStoredState';
 import CashFlowAnalysis from '../components/CashFlowAnalysis';
 
+// The pie legend. When `expandable` (an admin capability), a category with sub-items becomes a toggle
+// that reveals the item-level breakdown the server already sends under each group.
+function CategoryLegend({ rows, colours, unit, expandable, children }) {
+  const [open, setOpen] = useState(() => new Set());
+  const toggle = (name) => setOpen((cur) => {
+    const next = new Set(cur);
+    next.has(name) ? next.delete(name) : next.add(name);
+    return next;
+  });
+  return (
+    <div className="pie-legend" aria-label={`${unit === 'spending' ? 'Spending' : 'Income'} breakdown`}>
+      {rows.map((row, index) => {
+        const colour = colours[index % colours.length];
+        const canExpand = expandable && row.items && row.items.length > 0;
+        const isOpen = open.has(row.name);
+        const dot = <span className="legend-dot" style={{ background: colour }} aria-hidden="true" />;
+        const value = <span className="legend-value"><b>{formatNaira(row.amount)}</b><small>{row.percent}% of {unit}</small></span>;
+        return (
+          <div className="pie-legend-group" key={row.name}>
+            {canExpand ? (
+              <button type="button" className="pie-legend-item pie-legend-toggle" aria-expanded={isOpen} onClick={() => toggle(row.name)}>
+                {dot}
+                <span className="legend-name">{row.name}<span className="legend-caret" aria-hidden="true">{isOpen ? ' ▾' : ' ▸'}</span></span>
+                {value}
+              </button>
+            ) : (
+              <div className="pie-legend-item">{dot}<span className="legend-name">{row.name}</span>{value}</div>
+            )}
+            {canExpand && isOpen && (
+              <ul className="legend-subitems">
+                {row.items.map((sub) => (
+                  <li key={sub.item}>
+                    <span className="legend-subitem-name">{sub.item}</span>
+                    <span className="legend-subitem-value">{formatNaira(sub.total)} <small>{sub.percent}%</small></span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        );
+      })}
+      {children}
+    </div>
+  );
+}
+
 export default function Reports() {
   const live = useLiveRefresh(['reports']);
   const { can, isAdmin } = useAuth();
@@ -47,9 +93,9 @@ export default function Reports() {
     return () => { ignore = true; };
   }, [range, scopeId, live]);
 
-  const chart = report ? report.types.flatMap((t) => t.groups.map((g) => ({ name: `${t.type}: ${g.group}`, amount: g.total, percent: g.percent }))) : [];
+  const chart = report ? report.types.flatMap((t) => t.groups.map((g) => ({ name: `${t.type}: ${g.group}`, amount: g.total, percent: g.percent, items: g.items }))) : [];
   const colours = ['#8964ee', '#b29af7', '#64c7ad', '#f2ad6e', '#ee7f98', '#6a91d9', '#d6c6fa'];
-  const incomeChart = income ? income.types.flatMap((t) => t.groups.map((g) => ({ name: `${t.type}: ${g.group}`, amount: g.total, percent: g.percent }))) : [];
+  const incomeChart = income ? income.types.flatMap((t) => t.groups.map((g) => ({ name: `${t.type}: ${g.group}`, amount: g.total, percent: g.percent, items: g.items }))) : [];
   const incomeColours = ['#2d8a59', '#64c7ad', '#8ed6b6', '#b29af7', '#6a91d9', '#f2ad6e', '#ee7f98'];
 
   const exportFile = async () => {
@@ -124,15 +170,7 @@ export default function Reports() {
             </ResponsiveContainer>
             <div className="pie-total"><span>Total spending</span><b>{formatNaira(report.grandTotal)}</b></div>
           </div>
-          <div className="pie-legend" aria-label="Spending breakdown">
-            {chart.map((item, index) => (
-              <div className="pie-legend-item" key={item.name}>
-                <span className="legend-dot" style={{ background: colours[index % colours.length] }} aria-hidden="true" />
-                <span className="legend-name">{item.name}</span>
-                <span className="legend-value"><b>{formatNaira(item.amount)}</b><small>{item.percent}% of spending</small></span>
-              </div>
-            ))}
-          </div>
+          <CategoryLegend rows={chart} colours={colours} unit="spending" expandable={canScopeByAccount} />
         </div>
       )}
 
@@ -152,22 +190,17 @@ export default function Reports() {
             </ResponsiveContainer>
             <div className="pie-total"><span>Categorized income</span><b>{formatNaira(income.grandTotal)}</b></div>
           </div>
-          <div className="pie-legend" aria-label="Income breakdown">
-            {incomeChart.map((item, index) => (
-              <div className="pie-legend-item" key={item.name}>
-                <span className="legend-dot" style={{ background: incomeColours[index % incomeColours.length] }} aria-hidden="true" />
-                <span className="legend-name">{item.name}</span>
-                <span className="legend-value"><b>{formatNaira(item.amount)}</b><small>{item.percent}% of income</small></span>
-              </div>
-            ))}
+          <CategoryLegend rows={incomeChart} colours={incomeColours} unit="income" expandable={canScopeByAccount}>
             {income.uncategorized > 0 && (
-              <div className="pie-legend-item">
-                <span className="legend-dot" style={{ background: '#c5d0d9' }} aria-hidden="true" />
-                <span className="legend-name">Uncategorized</span>
-                <span className="legend-value"><b>{formatNaira(income.uncategorized)}</b><small>no category chosen</small></span>
+              <div className="pie-legend-group">
+                <div className="pie-legend-item">
+                  <span className="legend-dot" style={{ background: '#c5d0d9' }} aria-hidden="true" />
+                  <span className="legend-name">Uncategorized</span>
+                  <span className="legend-value"><b>{formatNaira(income.uncategorized)}</b><small>no category chosen</small></span>
+                </div>
               </div>
             )}
-          </div>
+          </CategoryLegend>
         </div>
       )}
     </>
