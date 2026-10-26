@@ -43,12 +43,17 @@ function CategoryLegend({ rows, colours, unit, expandable, children }) {
             )}
             {canExpand && isOpen && (
               <ul className="legend-subitems">
-                {row.items.map((sub) => (
-                  <li key={sub.item}>
-                    <span className="legend-subitem-name">{sub.item}</span>
-                    <span className="legend-subitem-value">{formatNaira(sub.total)} <small>{sub.percent}%</small></span>
-                  </li>
-                ))}
+                {row.items.map((sub) => {
+                  // The bar shows each item's share within this category; the number stays its share of the whole.
+                  const share = row.amount ? Math.round((sub.total / row.amount) * 100) : 0;
+                  return (
+                    <li key={sub.item}>
+                      <span className="legend-subitem-bar" style={{ width: `${Math.max(share, 2)}%`, background: `${colour}26` }} aria-hidden="true" />
+                      <span className="legend-subitem-name">{sub.item}</span>
+                      <span className="legend-subitem-value">{formatNaira(sub.total)} <small>{sub.percent}%</small></span>
+                    </li>
+                  );
+                })}
               </ul>
             )}
           </div>
