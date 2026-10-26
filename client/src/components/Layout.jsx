@@ -5,6 +5,7 @@ import { visibleNav } from '../nav';
 import CommandPalette from './CommandPalette';
 import QueueWidget from './QueueWidget';
 import PasswordDialog from './PasswordDialog';
+import UpdateAnnouncement from './UpdateAnnouncement';
 import { api } from '../api';
 
 function Icon({ name }) {
@@ -67,6 +68,7 @@ export default function Layout({ children }) {
         </header>
         <main>{notice && <p className="statement-notice" role="status">{notice} <button type="button" className="link" onClick={() => setNotice('')}>Dismiss</button></p>}{children}</main>
         {changingPassword && <PasswordDialog title="Change your password" askCurrent onSubmit={changePassword} onCancel={() => setChangingPassword(false)} />}
+        <UpdateAnnouncement />
         <nav className="mobile-nav" aria-label="Main navigation">
           {visibleNav(access).slice(0, 5).map((i) => <NavLink key={i.to} to={i.to} end={i.to === '/'} aria-label={`Navigate to ${i.label}`}><Icon name={i.icon} /><span>{i.label}</span></NavLink>)}
         </nav>
