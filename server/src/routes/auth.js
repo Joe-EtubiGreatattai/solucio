@@ -55,4 +55,11 @@ router.post('/password', authenticate, limiter, validate(passwordSchema), asyncH
 router.get('/me', authenticate, (req, res) =>
   res.json({ user: req.user, roleName: req.roleName, permissions: [...req.permissions] }));
 
+// Record that the signed-in user has seen a one-time announcement, so it isn't shown again on any device.
+const seenUpdateSchema = z.object({ id: z.string().trim().min(1).max(100) });
+router.post('/seen-update', authenticate, validate(seenUpdateSchema), asyncHandler(async (req, res) => {
+  await User.updateOne({ _id: req.user._id }, { $addToSet: { seenUpdates: req.validated.body.id } });
+  res.json({ ok: true });
+}));
+
 module.exports = router;

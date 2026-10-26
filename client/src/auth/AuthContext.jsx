@@ -30,6 +30,13 @@ export function AuthProvider({ children }) {
   // Re-read who I am and what I may do, e.g. after an admin changed my role.
   const refreshAccess = useCallback(() => api.get('/auth/me').then(startSession).catch(() => {}), []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Remember (server-side, so it sticks across devices) that this user has seen a one-time announcement.
+  // Updates the local user immediately so the announcement hides at once.
+  const markUpdateSeen = useCallback((id) => {
+    setUser((u) => (u && !(u.seenUpdates || []).includes(id) ? { ...u, seenUpdates: [...(u.seenUpdates || []), id] } : u));
+    return api.post('/auth/seen-update', { id }).catch(() => {});
+  }, []);
+
   const login = async (email, password) => {
     const r = await api.post('/auth/login', { email, password });
     setToken(r.token);
@@ -42,11 +49,12 @@ export function AuthProvider({ children }) {
     login,
     logout,
     refreshAccess,
+    markUpdateSeen,
     roleName: access.roleName,
     permissions: access.permissions,
     isAdmin: !!user && user.role === 'admin',
     can: (permission) => access.permissions.includes(permission),
-  }), [user, access, loading, logout, refreshAccess]); // eslint-disable-line react-hooks/exhaustive-deps
+  }), [user, access, loading, logout, refreshAccess, markUpdateSeen]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

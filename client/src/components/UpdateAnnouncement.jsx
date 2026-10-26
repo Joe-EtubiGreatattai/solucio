@@ -1,23 +1,22 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
-import { useStoredState } from '../hooks/useStoredState';
 
 // A one-time "what's new" modal for admins. Bump UPDATE_ID when there is a new thing to announce and
-// everyone who can see it will be shown it once more. "Seen" is remembered per browser, which is fine
-// for an announcement — the worst case is seeing it again on a new device.
+// everyone who can see it will be shown it once more. "Seen" is stored on the user record (server-side),
+// so dismissing it once hides it on every device that person signs in from.
 export const UPDATE_ID = 'reports-category-drilldown-2026-10';
-export const SEEN_KEY = 'solucio:seen-update';
 
 export default function UpdateAnnouncement() {
-  const { isAdmin, can } = useAuth();
+  const { isAdmin, can, user, markUpdateSeen } = useAuth();
   const navigate = useNavigate();
-  const [seen, setSeen] = useStoredState(SEEN_KEY, '');
+  const [dismissed, setDismissed] = useState(false);
   const primaryRef = useRef(null);
 
   // Only the people who can actually use the feature — admins and the maintenance super-user — are told.
   const eligible = isAdmin || can('accounts.manage');
-  const show = eligible && seen !== UPDATE_ID;
+  const alreadySeen = (user?.seenUpdates || []).includes(UPDATE_ID);
+  const show = eligible && !alreadySeen && !dismissed;
 
   useEffect(() => {
     if (!show) return undefined;
@@ -28,8 +27,8 @@ export default function UpdateAnnouncement() {
 
   if (!show) return null;
 
-  const dismiss = () => setSeen(UPDATE_ID);
-  const viewIt = () => { setSeen(UPDATE_ID); navigate('/reports'); };
+  const dismiss = () => { setDismissed(true); markUpdateSeen(UPDATE_ID); };
+  const viewIt = () => { setDismissed(true); markUpdateSeen(UPDATE_ID); navigate('/reports'); };
   const onKeyDown = (e) => { if (e.key === 'Escape') { e.preventDefault(); dismiss(); } };
 
   return (

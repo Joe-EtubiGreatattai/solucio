@@ -8,6 +8,8 @@ const userSchema = new mongoose.Schema(
     // The key of a Role document (see models/Role.js); the users routes check that it exists.
     role: { type: String, required: true, trim: true, lowercase: true },
     active: { type: Boolean, default: true },
+    // Ids of one-time "what's new" announcements this user has already seen (see UpdateAnnouncement).
+    seenUpdates: { type: [String], default: [] },
   },
   { timestamps: true }
 );

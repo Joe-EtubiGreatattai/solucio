@@ -39,6 +39,18 @@ test('/me requires a token and returns the user', async () => {
   expect(res.body.user.role).toBe('accountant');
 });
 
+test('a user can mark an update seen, and it comes back on /me (idempotent)', async () => {
+  const { token } = await createUser('admin');
+  expect((await request(app).post('/api/auth/seen-update').send({ id: 'reports-drilldown' })).status).toBe(401); // needs a token
+
+  const first = await request(app).post('/api/auth/seen-update').set(auth(token)).send({ id: 'reports-drilldown' });
+  expect(first.status).toBe(200);
+  await request(app).post('/api/auth/seen-update').set(auth(token)).send({ id: 'reports-drilldown' }); // again: no duplicate
+
+  const me = await request(app).get('/api/auth/me').set(auth(token));
+  expect(me.body.user.seenUpdates).toEqual(['reports-drilldown']);
+});
+
 test('login validates input', async () => {
   const res = await request(app).post('/api/auth/login').send({ email: 'not-an-email' });
   expect(res.status).toBe(400);
