@@ -15,6 +15,9 @@ const expenseSchema = new Schema(
     voidReason: String,
     voidedBy: { type: Schema.Types.ObjectId, ref: 'User' },
     voidedAt: Date,
+    // Set when another Solucio app recorded this line (e.g. Solucio Payroll), so it's never recorded twice
+    externalRef: { type: String, trim: true },
+    source: { type: String, trim: true },
   },
   { timestamps: true }
 );
@@ -27,5 +30,7 @@ expenseSchema.index({ voided: 1, date: -1 });
 // Account-scoped report aggregations match { account, voided, date-range }; this lets them use an index
 // instead of scanning, and the opening-balance scan (date < asOf) rides it too.
 expenseSchema.index({ account: 1, voided: 1, date: 1 });
+
+expenseSchema.index({ externalRef: 1 }, { unique: true, sparse: true });
 
 module.exports = mongoose.model('Expense', expenseSchema);

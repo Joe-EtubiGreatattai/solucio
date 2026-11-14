@@ -12,6 +12,10 @@ const incomeSchema = new Schema(
     group: { type: String, default: null },
     item: { type: String, default: null },
     receiptNumber: { type: String, required: true, unique: true },
+    // Recorded by another Solucio app (e.g. a patient payment from Solucio EMR): its reference, so it's recorded once
+    externalRef: { type: String, trim: true },
+    source: { type: String, trim: true },
+    note: { type: String, trim: true, maxlength: 500 },
     recordedBy: { type: Schema.Types.ObjectId, ref: 'User', required: true },
     voided: { type: Boolean, default: false },
     voidReason: String,
@@ -23,6 +27,7 @@ const incomeSchema = new Schema(
 // Matches the list page's exact sort ({ date: -1, createdAt: -1 }), so deep pages don't need an
 // in-memory sort.
 incomeSchema.index({ date: -1, createdAt: -1 });
+incomeSchema.index({ externalRef: 1 }, { unique: true, sparse: true });
 // Account-filtered lists, and the reports aggregation that matches { voided, date } over a range.
 incomeSchema.index({ account: 1, date: -1 });
 incomeSchema.index({ voided: 1, date: -1 });

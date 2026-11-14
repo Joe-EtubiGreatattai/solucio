@@ -70,3 +70,13 @@ Screens update by themselves when anyone changes data: income, expenses, account
         proxy_read_timeout 3600s;
     }
 ```
+
+## Solucio Payroll connection
+
+Solucio Payroll records each completed salary run here as expenses: the salaries under **Recurrent → Staff Wages**, and Paystack transfer fees and stamp duty under **Recurrent → Bank Charges**, from an account called **Paystack (payroll)**. Missing groups and the account are created the first time. Each line has a unique reference, so a run is never recorded twice. Entries can be voided like any other expense.
+
+Turn it on by setting `PAYROLL_INTEGRATION_KEY` (24+ random characters) in `server/.env` and the same value as `RECEIPTS_API_KEY` in Payroll. Optional: `PAYROLL_SALARY_TYPE`, `PAYROLL_SALARY_GROUP`, `PAYROLL_FEES_GROUP`, `PAYROLL_ACCOUNT_NAME` to file entries elsewhere. The route is `POST /api/integrations/payroll/expenses` (see `server/src/routes/integrations.js`).
+
+### Solucio EMR
+
+Patient payments taken by the EMR's cashier (and HMO claim payments) are recorded here as income, each with its own receipt number, which the EMR prints. Turn it on by setting `EMR_INTEGRATION_KEY` (24+ random characters) in `server/.env` and the same value as `RECEIPTS_API_KEY` in the EMR. Optional: `EMR_INCOME_ACCOUNT` (account name; default is the first active account) and `EMR_PATIENT_INCOME_TYPE` (default `Patient Services`). Each payment carries a reference, so sending it twice never records it twice. The route is `POST /api/integrations/emr/incomes`.
