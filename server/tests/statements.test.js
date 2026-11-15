@@ -179,6 +179,34 @@ describe('approving posts real records', () => {
     expect(await AuditLog.countDocuments({ action: 'expense.create' })).toBe(5);
   });
 
+  test('re-approving after an interrupted approval does not double-post (idempotent)', async () => {
+    // A large statement once posted all its records but then timed out (504) before the statement was
+    // marked approved, so the accountant retried the import and every row was posted a second time.
+    // Posting must be idempotent: a retry links to the records already posted instead of duplicating them.
+    const statement = await makeStatement([expenseRow(), incomeRow()]);
+    const first = await request(app).post(`/api/statements/${statement.id}/approve`).set(auth(admin.token));
+    expect(first.status).toBe(200);
+    expect(await Expense.countDocuments()).toBe(1);
+    expect(await Income.countDocuments()).toBe(1);
+
+    // Simulate the interrupted approval: records are in the books, but the statement never got marked
+    // approved and its postedId links never saved.
+    await Statement.findByIdAndUpdate(statement.id, {
+      status: 'review',
+      $unset: { 'transactions.$[].postedId': '', 'transactions.$[].postedModel': '' },
+    });
+
+    const retry = await request(app).post(`/api/statements/${statement.id}/approve`).set(auth(admin.token));
+    expect(retry.status).toBe(200);
+    expect(retry.body.status).toBe('approved');
+    expect(await Expense.countDocuments()).toBe(1); // no duplicate
+    expect(await Income.countDocuments()).toBe(1); // no duplicate
+    expect(retry.body.transactions.filter((t) => t.postedId)).toHaveLength(2);
+    // The retry re-linked to the originals rather than creating and auditing new records.
+    expect(await AuditLog.countDocuments({ action: 'expense.create' })).toBe(1);
+    expect(await AuditLog.countDocuments({ action: 'income.create' })).toBe(1);
+  });
+
   test('an excluded row is skipped: no record, no review requirement, does not block approval', async () => {
     const statement = await makeStatement([
       expenseRow({ included: false, confidence: 'needs-review', type: undefined, group: undefined, item: undefined }),

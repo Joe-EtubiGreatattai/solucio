@@ -265,11 +265,26 @@ router.post('/:id/approve', requirePermission('statements.approve'), asyncHandle
   // worth at a time, bulk-insert the income and expense records, then write their audit entries in one go.
   const incomeTx = included.filter((transaction) => transaction.direction === 'income');
   const expenseTx = included.filter((transaction) => transaction.direction !== 'income');
+  // Deterministic, uniquely-indexed reference tying each posted record to its statement row. This makes
+  // posting idempotent: if a previous approval posted the records but then timed out (a 504 on a large
+  // statement) before the statement was marked approved, retrying must re-link to those existing records
+  // instead of posting a second copy. Each posted row carries externalRef `stmt:<transactionId>`.
+  const refOf = (transaction) => `stmt:${transaction._id}`;
+  const [postedIncome, postedExpense] = await Promise.all([
+    Income.find({ externalRef: { $in: incomeTx.map(refOf) } }).select('_id externalRef'),
+    Expense.find({ externalRef: { $in: expenseTx.map(refOf) } }).select('_id externalRef'),
+  ]);
+  const incomeByRef = new Map(postedIncome.map((d) => [d.externalRef, d]));
+  const expenseByRef = new Map(postedExpense.map((d) => [d.externalRef, d]));
+
+  // Only post rows that aren't already in the books from an earlier (interrupted) approval.
+  const incomeToPost = incomeTx.filter((transaction) => !incomeByRef.has(refOf(transaction)));
+  const expenseToPost = expenseTx.filter((transaction) => !expenseByRef.has(refOf(transaction)));
 
   // Reserve a block of receipt numbers for each year the income rows fall in (usually just one), then
-  // hand them out in order.
+  // hand them out in order. Reserve only for rows actually being posted now, so retries don't burn numbers.
   const countByYear = new Map();
-  for (const transaction of incomeTx) {
+  for (const transaction of incomeToPost) {
     const year = String(lagosYear(transaction.date));
     countByYear.set(year, (countByYear.get(year) || 0) + 1);
   }
@@ -278,30 +293,51 @@ router.post('/:id/approve', requirePermission('statements.approve'), asyncHandle
     receiptsByYear.set(year, { numbers: await reserveReceipts(year, count), next: 0 });
   }
 
-  const incomeDocs = incomeTx.map((transaction) => {
+  const incomeDocs = incomeToPost.map((transaction) => {
     const slot = receiptsByYear.get(String(lagosYear(transaction.date)));
     const receiptNumber = slot.numbers[slot.next];
     slot.next += 1;
     return {
       amount: transaction.amount, date: transaction.date, method: 'transfer', account: account._id,
-      receiptNumber, recordedBy: req.user._id,
+      receiptNumber, recordedBy: req.user._id, externalRef: refOf(transaction),
       type: transaction.type || null, group: transaction.group || null, item: transaction.item || null,
     };
   });
-  const expenseDocs = expenseTx.map((transaction) => ({
+  const expenseDocs = expenseToPost.map((transaction) => ({
     amount: transaction.amount, date: transaction.date, account: account._id,
     type: transaction.type, group: transaction.group, item: transaction.item || null,
-    note: `Imported from ${statement.fileName}`, recordedBy: req.user._id,
+    note: `Imported from ${statement.fileName}`, recordedBy: req.user._id, externalRef: refOf(transaction),
   }));
 
+  // Insert with ordered:false and tolerate duplicate-key (11000) errors, in case a concurrent approval of
+  // the same statement posted a row first; those rows are then picked up by the re-query below.
+  const dupTolerantInsert = async (Model, docs) => {
+    if (!docs.length) return [];
+    try { return await Model.insertMany(docs, { ordered: false }); }
+    catch (err) {
+      const errors = err.writeErrors || err.result?.result?.writeErrors || [];
+      if (err.code === 11000 || (errors.length && errors.every((e) => (e.code || e.err?.code) === 11000))) {
+        return err.insertedDocs || [];
+      }
+      throw err;
+    }
+  };
   const [createdIncome, createdExpense] = await Promise.all([
-    incomeDocs.length ? Income.insertMany(incomeDocs) : [],
-    expenseDocs.length ? Expense.insertMany(expenseDocs) : [],
+    dupTolerantInsert(Income, incomeDocs),
+    dupTolerantInsert(Expense, expenseDocs),
   ]);
+  createdIncome.forEach((d) => incomeByRef.set(d.externalRef, d));
+  createdExpense.forEach((d) => expenseByRef.set(d.externalRef, d));
 
-  // insertMany preserves order, so each created record lines up with the transaction that produced it.
-  incomeTx.forEach((transaction, i) => { transaction.postedModel = 'Income'; transaction.postedId = createdIncome[i]._id; });
-  expenseTx.forEach((transaction, i) => { transaction.postedModel = 'Expense'; transaction.postedId = createdExpense[i]._id; });
+  // Fill any row still unmapped because a concurrent approval inserted it (dup-key above skipped it).
+  const missingInc = incomeTx.map(refOf).filter((ref) => !incomeByRef.has(ref));
+  if (missingInc.length) (await Income.find({ externalRef: { $in: missingInc } }).select('_id externalRef')).forEach((d) => incomeByRef.set(d.externalRef, d));
+  const missingExp = expenseTx.map(refOf).filter((ref) => !expenseByRef.has(ref));
+  if (missingExp.length) (await Expense.find({ externalRef: { $in: missingExp } }).select('_id externalRef')).forEach((d) => expenseByRef.set(d.externalRef, d));
+
+  // Link every row to its record — the one just created, or the one a prior/concurrent approval posted.
+  incomeTx.forEach((transaction) => { transaction.postedModel = 'Income'; transaction.postedId = incomeByRef.get(refOf(transaction))._id; });
+  expenseTx.forEach((transaction) => { transaction.postedModel = 'Expense'; transaction.postedId = expenseByRef.get(refOf(transaction))._id; });
 
   await logAuditBatch([
     ...createdIncome.map((income) => ({
