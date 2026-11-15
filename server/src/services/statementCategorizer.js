@@ -504,4 +504,4 @@ async function loadCategorizerContext() {
   };
 }
 
-module.exports = { categorizeTransactions, loadCategorizerContext, buildMemory, buildKeywordMemory, payeeOf, isBankCharge };
+module.exports = { categorizeTransactions, loadCategorizerContext, buildMemory, buildKeywordMemory, payeeOf, isBankCharge, isInternalTransfer };
