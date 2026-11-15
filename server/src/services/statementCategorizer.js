@@ -384,12 +384,6 @@ function categorizeExpense(t, ctx) {
   const learned = recallKeyword(keywordMemory, narration, payee, resolve);
   if (learned) return learned;
 
-  // A transfer to another Solucio account is caught before the keyword rules, so a salary-funding
-  // transfer ("... SALARY ...") isn't mistaken for a Staff Wages expense.
-  if (isInternalTransfer(narration, t.reference, ctx)) {
-    return { ...blank, internalTransfer: true, included: true, confidence: 'high', categorySource: 'rule', reason: 'Transfer to another Solucio account — kept for the balance but not counted as spending.' };
-  }
-
   const text = spaced(narration);
   const hits = [];
   for (const rule of RULES) {
@@ -416,6 +410,9 @@ function categorizeExpense(t, ctx) {
     return { type: named.type, group: named.group, item: named.item, confidence: 'medium', categorySource: 'rule', reason: `Mentions "${named.name}"` };
   }
 
+  if (isOwner(narration, ownerName)) {
+    return { ...blank, confidence: 'needs-review', categorySource: 'rule', reason: 'Looks like a transfer to the account holder\'s own account, which is usually not an expense. Leave it out or choose a category.' };
+  }
   return { ...blank, confidence: 'needs-review', categorySource: 'rule', reason: describeUnknown(narration, payee) };
 }
 
@@ -425,7 +422,7 @@ function categorizeIncome(t, ctx) {
   const result = (confidence, reason) => ({ ...blank, confidence, categorySource: 'rule', reason });
   if (REVERSAL.test(narration)) return result('needs-review', 'Reversal of an earlier payment, not new income. Usually left out.');
   if (LOAN.test(narration)) return result('needs-review', 'Looks like a loan rather than earned income');
-  if (isInternalTransfer(narration, t.reference, ctx)) return { ...blank, internalTransfer: true, included: true, confidence: 'high', categorySource: 'rule', reason: 'Transfer from another Solucio account — kept for the balance but not counted as income.' };
+  if (isOwner(narration, ownerName)) return result('needs-review', 'Looks like a transfer from the account holder\'s own account, not income');
 
   // An income payee a reviewer has categorized before (exactly, or close enough) gets that category.
   const payee = payeeOf(narration);

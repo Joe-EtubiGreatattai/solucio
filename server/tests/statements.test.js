@@ -389,7 +389,7 @@ describe('smarter categorization', () => {
       transactions: [incomeRow({ narration: 'NIP CR/MOB/SOLUCIO CLINICS LIMITED/ROLEZ/Moniepoint active', confidence: 'medium' })],
     });
     const res = await request(app).post(`/api/statements/${statement.id}/recategorize`).set(auth(accountant.token));
-    expect(res.body.transactions[0]).toMatchObject({ internalTransfer: true, confidence: 'high', reason: expect.stringMatching(/another Solucio account/) });
+    expect(res.body.transactions[0]).toMatchObject({ confidence: 'needs-review', reason: expect.stringMatching(/own account/) });
   });
 
   test('approved statements cannot be re-checked', async () => {
