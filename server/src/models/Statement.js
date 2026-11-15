@@ -21,6 +21,10 @@ const transactionSchema = new Schema(
     // Whether this row is brought into the books when the statement is approved. Lets someone
     // import only the income rows from a statement, or only the expenses, and leave the rest out.
     included: { type: Boolean, default: true },
+    // A transfer between two Solucio-owned accounts (e.g. moving money to fund salaries). It is still
+    // posted so each account's balance is right, but it is flagged so reports don't count it as
+    // income or spending, and it doesn't need a category.
+    internalTransfer: { type: Boolean, default: false },
     // Which real record this row became once the statement was approved (for traceability only).
     postedModel: { type: String, enum: ['Income', 'Expense'] },
     postedId: { type: Schema.Types.ObjectId },

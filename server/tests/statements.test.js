@@ -207,6 +207,18 @@ describe('approving posts real records', () => {
     expect(await AuditLog.countDocuments({ action: 'income.create' })).toBe(1);
   });
 
+  test('an internal-transfer row posts without a category and is flagged on the record', async () => {
+    const statement = await makeStatement([
+      { date: new Date('2026-07-15T00:00:00Z'), narration: 'TRF TO SOLUCIO CLINICS - OWN ACCOUNT', amount: 2000000, direction: 'expense', internalTransfer: true, confidence: 'high' },
+    ]);
+    const approved = await request(app).post(`/api/statements/${statement.id}/approve`).set(auth(admin.token));
+    expect(approved.status).toBe(200);
+    const expenses = await Expense.find();
+    expect(expenses).toHaveLength(1);
+    expect(expenses[0]).toMatchObject({ internalTransfer: true, type: 'Internal transfer', amount: 2000000 });
+    expect(approved.body.transactions[0].postedModel).toBe('Expense');
+  });
+
   test('an excluded row is skipped: no record, no review requirement, does not block approval', async () => {
     const statement = await makeStatement([
       expenseRow({ included: false, confidence: 'needs-review', type: undefined, group: undefined, item: undefined }),
@@ -377,7 +389,7 @@ describe('smarter categorization', () => {
       transactions: [incomeRow({ narration: 'NIP CR/MOB/SOLUCIO CLINICS LIMITED/ROLEZ/Moniepoint active', confidence: 'medium' })],
     });
     const res = await request(app).post(`/api/statements/${statement.id}/recategorize`).set(auth(accountant.token));
-    expect(res.body.transactions[0]).toMatchObject({ confidence: 'needs-review', reason: expect.stringMatching(/own account/) });
+    expect(res.body.transactions[0]).toMatchObject({ internalTransfer: true, confidence: 'high', reason: expect.stringMatching(/another Solucio account/) });
   });
 
   test('approved statements cannot be re-checked', async () => {

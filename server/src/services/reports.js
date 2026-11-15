@@ -13,20 +13,29 @@ const rangeMatch = (from, to, accountId) => withAccount({
   date: { $gte: parseLagosDate(from), $lt: dayAfter(parseLagosDate(to)) },
 }, accountId);
 
+// Profit-and-loss view: real income and spending only. Internal transfers between Solucio's own accounts
+// still move cash (so they stay in account balances), but they are not income or spending, so every
+// income/expense total and category breakdown leaves them out.
+const pnlMatch = (from, to, accountId) => ({ ...rangeMatch(from, to, accountId), internalTransfer: { $ne: true } });
+const transferMatch = (from, to, accountId) => ({ ...rangeMatch(from, to, accountId), internalTransfer: true });
+
 async function totalFor(Model, match) {
   const [r] = await Model.aggregate([{ $match: match }, { $group: { _id: null, total: { $sum: '$amount' }, count: { $sum: 1 } } }]);
   return { total: r ? r.total : 0, count: r ? r.count : 0 };
 }
 
 async function summary(from, to, accountId) {
-  const match = rangeMatch(from, to, accountId);
-  const [income, spending] = await Promise.all([totalFor(Income, match), totalFor(Expense, match)]);
-  return { from, to, income, spending, net: income.total - spending.total };
+  const pnl = pnlMatch(from, to, accountId);
+  const transfers = transferMatch(from, to, accountId);
+  const [income, spending, transferIn, transferOut] = await Promise.all([
+    totalFor(Income, pnl), totalFor(Expense, pnl), totalFor(Income, transfers), totalFor(Expense, transfers),
+  ]);
+  return { from, to, income, spending, net: income.total - spending.total, transfers: { in: transferIn.total, out: transferOut.total } };
 }
 
 async function spendingByCategory(from, to, accountId) {
   const rows = await Expense.aggregate([
-    { $match: rangeMatch(from, to, accountId) },
+    { $match: pnlMatch(from, to, accountId) },
     { $group: { _id: { type: '$type', group: '$group', item: '$item' }, total: { $sum: '$amount' } } },
   ]);
   const totals = new Map(rows.map((r) => [`${r._id.type}|${r._id.group || ''}|${r._id.item || ''}`, r.total]));
@@ -60,7 +69,7 @@ async function spendingByCategory(from, to, accountId) {
 // Income grouped under the income category tree, with everything uncategorized kept in its own bucket.
 async function incomeByCategory(from, to, accountId) {
   const rows = await Income.aggregate([
-    { $match: rangeMatch(from, to, accountId) },
+    { $match: pnlMatch(from, to, accountId) },
     { $group: { _id: { type: '$type', group: '$group', item: '$item' }, total: { $sum: '$amount' } } },
   ]);
   const uncategorized = rows.filter((r) => !r._id.type).reduce((s, r) => s + r.total, 0);
@@ -143,14 +152,15 @@ function bucketFor(numDays) {
 
 // Groups a day-by-day series into week (7-day, counted from the first day) or month (calendar) buckets.
 function rebucket(days, bucket) {
-  if (bucket === 'day') return days.map((d) => ({ date: d.date, income: d.income, expenses: d.expenses }));
+  if (bucket === 'day') return days.map((d) => ({ date: d.date, income: d.income, expenses: d.expenses, transferNet: d.transferNet || 0 }));
   const key = bucket === 'week' ? (d, i) => days[Math.floor(i / 7) * 7].date : (d) => d.date.slice(0, 7);
   const byBucket = new Map();
   days.forEach((d, i) => {
     const k = key(d, i);
-    const row = byBucket.get(k) || { date: k, income: 0, expenses: 0 };
+    const row = byBucket.get(k) || { date: k, income: 0, expenses: 0, transferNet: 0 };
     row.income += d.income;
     row.expenses += d.expenses;
+    row.transferNet += d.transferNet || 0;
     byBucket.set(k, row);
   });
   return [...byBucket.values()];
@@ -164,36 +174,48 @@ const changePct = (curr, prev) => {
 // A fuller picture for the Reports page: a trend series with a running cash balance, this period
 // against the one before it, a simple burn-rate/runway estimate, and the biggest drivers of the numbers.
 async function cashFlow(from, to, accountId, precomputed = {}) {
-  const match = rangeMatch(from, to, accountId);
-  const [income, expenses, incomeByDay, expenseByDay] = await Promise.all([
-    totalFor(Income, match),
-    totalFor(Expense, match),
-    dailyTotals(Income, match),
-    dailyTotals(Expense, match),
+  const pnl = pnlMatch(from, to, accountId);
+  const transfers = transferMatch(from, to, accountId);
+  const [income, expenses, transferIn, transferOut, incomeByDay, expenseByDay, transferInByDay, transferOutByDay] = await Promise.all([
+    totalFor(Income, pnl),
+    totalFor(Expense, pnl),
+    totalFor(Income, transfers),
+    totalFor(Expense, transfers),
+    dailyTotals(Income, pnl),
+    dailyTotals(Expense, pnl),
+    dailyTotals(Income, transfers),
+    dailyTotals(Expense, transfers),
   ]);
-  const days = listDays(from, to).map((date) => ({ date, income: incomeByDay.get(date) || 0, expenses: expenseByDay.get(date) || 0 }));
+  const days = listDays(from, to).map((date) => ({
+    date, income: incomeByDay.get(date) || 0, expenses: expenseByDay.get(date) || 0,
+    transferNet: (transferInByDay.get(date) || 0) - (transferOutByDay.get(date) || 0),
+  }));
   const numDays = days.length;
   const bucket = bucketFor(numDays);
 
   const dayBeforeFrom = addDays(from, -1);
   const startingCash = (await accountBalances(dayBeforeFrom, accountId)).grandTotal;
   let cumulative = startingCash;
+  // Bars show real income and spending; the running balance line also moves with internal transfers,
+  // so it stays a true cash balance that ties to account balances.
   const series = rebucket(days, bucket).map((row) => {
     const net = row.income - row.expenses;
-    cumulative += net;
-    return { ...row, net, cumulative };
+    cumulative += net + row.transferNet;
+    return { date: row.date, income: row.income, expenses: row.expenses, net, cumulative };
   });
 
   const prevTo = dayBeforeFrom;
   const prevFrom = addDays(prevTo, -(numDays - 1));
-  const prevMatch = rangeMatch(prevFrom, prevTo, accountId);
+  const prevMatch = pnlMatch(prevFrom, prevTo, accountId);
   const [prevIncome, prevExpenses] = await Promise.all([totalFor(Income, prevMatch), totalFor(Expense, prevMatch)]);
   const net = income.total - expenses.total;
   const prevNet = prevIncome.total - prevExpenses.total;
+  const transferNetTotal = transferIn.total - transferOut.total;
 
-  // Cash on hand at the end of the range is the opening balance plus this period's net — no need to
-  // scan the whole history a second time (the opening-balance scan above already did that work).
-  const cashOnHand = startingCash + net;
+  // Cash on hand at the end of the range is the opening balance plus this period's real net and the net
+  // of internal transfers (which move money between accounts). The opening-balance scan already counted
+  // transfers up to the start, so balances stay correct per account and net to zero across all accounts.
+  const cashOnHand = startingCash + net + transferNetTotal;
   const avgDailyNet = Math.round(net / numDays);
   const runwayDays = avgDailyNet < 0 ? (cashOnHand > 0 ? Math.floor(cashOnHand / Math.abs(avgDailyNet)) : 0) : null;
 
@@ -205,7 +227,7 @@ async function cashFlow(from, to, accountId, precomputed = {}) {
     .sort((a, b) => b.total - a.total)
     .slice(0, 5);
 
-  const methodRows = await Income.aggregate([{ $match: match }, { $group: { _id: '$method', total: { $sum: '$amount' } } }]);
+  const methodRows = await Income.aggregate([{ $match: pnl }, { $group: { _id: '$method', total: { $sum: '$amount' } } }]);
   const incomeByMethod = methodRows
     .map((r) => ({ method: r._id, total: r.total, percent: income.total ? Math.round((r.total / income.total) * 1000) / 10 : 0 }))
     .sort((a, b) => b.total - a.total);
@@ -214,7 +236,7 @@ async function cashFlow(from, to, accountId, precomputed = {}) {
     range: { from, to },
     bucket,
     series,
-    totals: { income: income.total, expenses: expenses.total, net, cashOnHand },
+    totals: { income: income.total, expenses: expenses.total, net, cashOnHand, transfersIn: transferIn.total, transfersOut: transferOut.total },
     previous: { income: prevIncome.total, expenses: prevExpenses.total, net: prevNet },
     change: { income: changePct(income.total, prevIncome.total), expenses: changePct(expenses.total, prevExpenses.total), net: changePct(net, prevNet) },
     burnRate: { avgDailyNet, runwayDays },

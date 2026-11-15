@@ -18,6 +18,9 @@ const expenseSchema = new Schema(
     // Set when another Solucio app recorded this line (e.g. Solucio Payroll), so it's never recorded twice
     externalRef: { type: String, trim: true },
     source: { type: String, trim: true },
+    // Money moved out to another Solucio-owned account (e.g. to fund salaries). It still counts toward
+    // this account's balance, but it is NOT real spending, so reports leave it out of expense totals.
+    internalTransfer: { type: Boolean, default: false },
   },
   { timestamps: true }
 );
@@ -30,6 +33,8 @@ expenseSchema.index({ voided: 1, date: -1 });
 // Account-scoped report aggregations match { account, voided, date-range }; this lets them use an index
 // instead of scanning, and the opening-balance scan (date < asOf) rides it too.
 expenseSchema.index({ account: 1, voided: 1, date: 1 });
+// Report aggregations split real spending from internal transfers on { account, voided, internalTransfer, date }.
+expenseSchema.index({ account: 1, voided: 1, internalTransfer: 1, date: 1 });
 
 expenseSchema.index({ externalRef: 1 }, { unique: true, sparse: true });
 

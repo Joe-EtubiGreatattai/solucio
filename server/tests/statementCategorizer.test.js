@@ -279,17 +279,24 @@ describe('income', () => {
     expect(one('NIP TFR FROM PATIENT ACCOUNT', 'income')).toMatchObject({ type: null, group: null, item: null });
   });
 
-  test('loans and transfers from the account holder need review', () => {
+  test('a loan still needs review; a transfer from the holder is an internal transfer', () => {
     expect(one('UMORU, OJOAJOGWU ANTHONY/LEND', 'income')).toMatchObject({ confidence: 'needs-review', reason: expect.stringMatching(/loan/i) });
     expect(one('NIP TFR FROM GREATATTAI JOE-ETUBI', 'income', { ownerName: 'Great Attai Joe-Etubi' }))
-      .toMatchObject({ confidence: 'needs-review', reason: expect.stringMatching(/own account/i) });
+      .toMatchObject({ internalTransfer: true, confidence: 'high', reason: expect.stringMatching(/another Solucio account/i) });
     // A relative who shares a surname is not the account holder.
     expect(one('TRANSFER FROM GIFT ENYO-OJO JOE-ETUBI', 'income', { ownerName: 'Great Attai Joe-Etubi' }).confidence).toBe('medium');
   });
 
-  test('a transfer to the account holder is flagged rather than guessed', () => {
+  test('a transfer to the account holder is marked an internal transfer, no category needed', () => {
     expect(one('MOBILE TRF TO PAY/ /GREAT ATTAI JOE-ETUBI', 'expense', { ownerName: 'Great Attai Joe-Etubi' }))
-      .toMatchObject({ confidence: 'needs-review', reason: expect.stringMatching(/own account/i) });
+      .toMatchObject({ internalTransfer: true, included: true, confidence: 'high', type: null, reason: expect.stringMatching(/another Solucio account/i) });
+  });
+
+  test('a transfer naming one of the clinic\'s own account numbers is internal', () => {
+    expect(one('MOBILE TRF TO GTB/ 8272060369 SALARY FUNDING', 'expense', { ownAccountNumbers: ['8272060369', '5155201071'] }))
+      .toMatchObject({ internalTransfer: true, confidence: 'high' });
+    // A stranger's account number is not ours.
+    expect(one('MOBILE TRF TO GTB/ 0123456789 SUPPLIER', 'expense', { ownAccountNumbers: ['8272060369'] }).internalTransfer).toBeFalsy();
   });
 });
 
@@ -358,13 +365,13 @@ describe('Zenith Bank wording', () => {
       'TRF FROM OMIDAU ENTERPRISES//TRF TO SOLUCIO CLINICS//Hospital bill',
       'NIP/FCMB/LOUNGE ONE ENTERPRISE/webTB1cMedicare SamuelSOLUCIO CLINICS',
     ])('%s is ordinary income', (narration) => {
-      expect(one(narration, 'income', owner).reason).not.toMatch(/own account/);
+      expect(one(narration, 'income', owner).internalTransfer).toBeFalsy();
     });
     test.each([
       'NIP CR/MOB/SOLUCIO CLINICS LIMITED/ROLEZ/Moniepoint active',
       'TRF FRM SOLUCIO CLINICS - NHIS COLLECTION TO SOLUCIO CLINICS',
-    ])('%s is from the clinic\'s own account', (narration) => {
-      expect(one(narration, 'income', owner)).toMatchObject({ confidence: 'needs-review', reason: expect.stringMatching(/own account/) });
+    ])('%s is an internal transfer from the clinic\'s own account', (narration) => {
+      expect(one(narration, 'income', owner)).toMatchObject({ internalTransfer: true, confidence: 'high' });
     });
   });
 

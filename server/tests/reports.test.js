@@ -21,6 +21,32 @@ test('summary totals exclude voided entries', async () => {
   expect(res.body.net).toBe(70000);
 });
 
+test('internal transfers are left out of income and spending, but still move cash', async () => {
+  const d = '2026-09-21T10:00:00Z';
+  await makeIncome({ ...ctx(), amount: 100000, date: d }); // real income
+  await makeIncome({ ...ctx(), amount: 800000, date: d, internalTransfer: true }); // moved in from another account
+  await makeExpense({ ...ctx(), amount: 30000, date: d }); // real spending
+  await makeExpense({ ...ctx(), amount: 500000, date: d, internalTransfer: true }); // moved out to another account
+
+  const sum = await get('/summary?from=2026-09-21&to=2026-09-21');
+  expect(sum.body.income.total).toBe(100000);
+  expect(sum.body.spending.total).toBe(30000);
+  expect(sum.body.transfers).toEqual({ in: 800000, out: 500000 });
+
+  const cf = await get('/cash-flow?from=2026-09-21&to=2026-09-21');
+  expect(cf.body.totals.income).toBe(100000);
+  expect(cf.body.totals.expenses).toBe(30000);
+  expect(cf.body.totals.transfersIn).toBe(800000);
+  expect(cf.body.totals.transfersOut).toBe(500000);
+  // Opening 500000 + real net (100000-30000) + transfer net (800000-500000).
+  expect(cf.body.totals.cashOnHand).toBe(500000 + 70000 + 300000);
+
+  // Per-account balance still includes the moved money.
+  const bal = await get('/account-balances');
+  const row = bal.body.accounts.find((a) => a.accountId === String(account._id));
+  expect(row.balance).toBe(500000 + (100000 + 800000) - (30000 + 500000));
+});
+
 test('ranges follow the Lagos day boundary', async () => {
   await makeIncome({ ...ctx(), amount: 1, date: '2026-09-20T23:00:00Z' }); // 21st 00:00 Lagos: in
   await makeIncome({ ...ctx(), amount: 2, date: '2026-09-21T22:59:59.999Z' }); // 21st 23:59:59.999: in

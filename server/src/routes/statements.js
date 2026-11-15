@@ -48,7 +48,7 @@ const presentPopulated = (statement) => statement.populate(REFS).then(present);
 
 // A person has already decided this row, so automatic categorization must leave it alone.
 const decidedByPerson = (t) => t.categorySource === 'reviewer' || (!t.categorySource && !!t.reviewedAt);
-const suggestion = (r) => ({ type: r.type, group: r.group, item: r.item, confidence: r.confidence, reason: r.reason, categorySource: r.categorySource });
+const suggestion = (r) => ({ type: r.type, group: r.group, item: r.item, confidence: r.confidence, reason: r.reason, categorySource: r.categorySource, internalTransfer: !!r.internalTransfer });
 
 // The library only needs each statement's identity and two counts. Pulling only the two transaction
 // subfields the counts need — instead of every row's narration, amount, reason, etc. — keeps this list
@@ -236,6 +236,9 @@ router.post('/:id/approve', requirePermission('statements.approve'), asyncHandle
   ]);
   const blockers = [];
   for (const transaction of included) {
+    // Internal transfers between Solucio's own accounts aren't income or spending, so they don't need
+    // a category — they're posted with a reserved 'Internal transfer' type and left out of reports.
+    if (transaction.internalTransfer) continue;
     const ledger = transaction.direction === 'income' ? 'income' : 'expense';
     const addBlocker = (action, create) => blockers.push({
       transactionId: String(transaction._id), narration: transaction.narration, kind: ledger,
@@ -300,12 +303,16 @@ router.post('/:id/approve', requirePermission('statements.approve'), asyncHandle
     return {
       amount: transaction.amount, date: transaction.date, method: 'transfer', account: account._id,
       receiptNumber, recordedBy: req.user._id, externalRef: refOf(transaction),
-      type: transaction.type || null, group: transaction.group || null, item: transaction.item || null,
+      internalTransfer: !!transaction.internalTransfer,
+      type: transaction.internalTransfer ? (transaction.type || 'Internal transfer') : (transaction.type || null),
+      group: transaction.group || null, item: transaction.item || null,
     };
   });
   const expenseDocs = expenseToPost.map((transaction) => ({
     amount: transaction.amount, date: transaction.date, account: account._id,
-    type: transaction.type, group: transaction.group, item: transaction.item || null,
+    internalTransfer: !!transaction.internalTransfer,
+    type: transaction.internalTransfer ? (transaction.type || 'Internal transfer') : transaction.type,
+    group: transaction.group, item: transaction.item || null,
     note: `Imported from ${statement.fileName}`, recordedBy: req.user._id, externalRef: refOf(transaction),
   }));
 

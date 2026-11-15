@@ -1,4 +1,5 @@
 const Statement = require('../models/Statement');
+const Account = require('../models/Account');
 const { publicTree } = require('./categories');
 
 // Keyword rules point at category *names*; they are resolved against the live tree at run time, so an
@@ -115,6 +116,18 @@ function isOwner(narration, ownerName) {
   const payeeWords = new Set(payee.label.split(' ').slice(0, ownerWords.length + 1));
   const shared = ownerWords.filter((word) => payeeWords.has(word)).length;
   return shared >= Math.min(3, ownerWords.length);
+}
+
+// A transfer between two Solucio-owned accounts (e.g. moving money to fund salaries). Judged the same
+// way as an own-account transfer — by the counterparty, via isOwner — and also when the narration or
+// reference names one of the clinic's own account numbers.
+function isInternalTransfer(narration, reference, { ownerName, ownAccountNumbers }) {
+  if (isOwner(narration, ownerName)) return true;
+  if (ownAccountNumbers && ownAccountNumbers.length) {
+    const hay = `${narration || ''} ${reference || ''}`;
+    if (ownAccountNumbers.some((num) => num && String(num).length >= 6 && hay.includes(String(num)))) return true;
+  }
+  return false;
 }
 
 function resolver(tree) {
@@ -371,6 +384,12 @@ function categorizeExpense(t, ctx) {
   const learned = recallKeyword(keywordMemory, narration, payee, resolve);
   if (learned) return learned;
 
+  // A transfer to another Solucio account is caught before the keyword rules, so a salary-funding
+  // transfer ("... SALARY ...") isn't mistaken for a Staff Wages expense.
+  if (isInternalTransfer(narration, t.reference, ctx)) {
+    return { ...blank, internalTransfer: true, included: true, confidence: 'high', categorySource: 'rule', reason: 'Transfer to another Solucio account — kept for the balance but not counted as spending.' };
+  }
+
   const text = spaced(narration);
   const hits = [];
   for (const rule of RULES) {
@@ -397,9 +416,6 @@ function categorizeExpense(t, ctx) {
     return { type: named.type, group: named.group, item: named.item, confidence: 'medium', categorySource: 'rule', reason: `Mentions "${named.name}"` };
   }
 
-  if (isOwner(narration, ownerName)) {
-    return { ...blank, confidence: 'needs-review', categorySource: 'rule', reason: 'Looks like a transfer to the account holder\'s own account, which is usually not an expense. Leave it out or choose a category.' };
-  }
   return { ...blank, confidence: 'needs-review', categorySource: 'rule', reason: describeUnknown(narration, payee) };
 }
 
@@ -409,7 +425,7 @@ function categorizeIncome(t, ctx) {
   const result = (confidence, reason) => ({ ...blank, confidence, categorySource: 'rule', reason });
   if (REVERSAL.test(narration)) return result('needs-review', 'Reversal of an earlier payment, not new income. Usually left out.');
   if (LOAN.test(narration)) return result('needs-review', 'Looks like a loan rather than earned income');
-  if (isOwner(narration, ownerName)) return result('needs-review', 'Looks like a transfer from the account holder\'s own account, not income');
+  if (isInternalTransfer(narration, t.reference, ctx)) return { ...blank, internalTransfer: true, included: true, confidence: 'high', categorySource: 'rule', reason: 'Transfer from another Solucio account — kept for the balance but not counted as income.' };
 
   // An income payee a reviewer has categorized before (exactly, or close enough) gets that category.
   const payee = payeeOf(narration);
@@ -456,19 +472,20 @@ function pairReversals(rows, results) {
 // Pure: suggests type/group/item, confidence, a plain-English reason and (for reversal pairs) inclusion.
 function categorizeTransactions(rows, {
   tree = [], memory = new Map(), keywordMemory = new Map(),
-  incomeTree = [], incomeMemory = new Map(), incomeKeywordMemory = new Map(), ownerName = '',
+  incomeTree = [], incomeMemory = new Map(), incomeKeywordMemory = new Map(), ownerName = '', ownAccountNumbers = [],
 } = {}) {
-  const expenseCtx = { resolve: resolver(tree), memory, keywordMemory, names: treeNames(tree), ownerName };
-  const incomeCtx = { resolve: resolver(incomeTree), memory: incomeMemory, keywordMemory: incomeKeywordMemory, names: treeNames(incomeTree), ownerName };
+  const expenseCtx = { resolve: resolver(tree), memory, keywordMemory, names: treeNames(tree), ownerName, ownAccountNumbers };
+  const incomeCtx = { resolve: resolver(incomeTree), memory: incomeMemory, keywordMemory: incomeKeywordMemory, names: treeNames(incomeTree), ownerName, ownAccountNumbers };
   const results = rows.map((t) => (t.direction === 'income' ? categorizeIncome(t, incomeCtx) : categorizeExpense(t, expenseCtx)));
   pairReversals(rows, results);
   return results;
 }
 
 async function loadCategorizerContext() {
-  const [tree, incomeTree, statements] = await Promise.all([
+  const [tree, incomeTree, accounts, statements] = await Promise.all([
     publicTree('expense'),
     publicTree('income'),
+    Account.find({}, { accountNumber: 1 }).lean(),
     Statement.find({}, {
       status: 1, approvedAt: 1, updatedAt: 1, createdAt: 1,
       'transactions.narration': 1, 'transactions.direction': 1, 'transactions.type': 1, 'transactions.group': 1,
@@ -479,6 +496,7 @@ async function loadCategorizerContext() {
   return {
     tree,
     incomeTree,
+    ownAccountNumbers: accounts.map((a) => a.accountNumber).filter(Boolean),
     memory: buildMemory(statements, 'expense'),
     incomeMemory: buildMemory(statements, 'income'),
     keywordMemory: buildKeywordMemory(statements, 'expense'),
