@@ -325,6 +325,7 @@ export default function StatementReview() {
                     {transaction.type && selectedIncomeGroup?.items?.length > 0 && <label className="field"><span>Item</span><select value={transaction.item || ''} disabled={editorSyncing} onChange={(event) => saveTransaction({ type: selectedIncomeType?.type, group: selectedIncomeGroup?.name, item: event.target.value })}><option value="">Choose item</option>{selectedIncomeGroup.items.map((entry) => <option key={entry} value={entry}>{entry}</option>)}</select></label>}
                   </>}
                   <label className="check"><input type="checkbox" checked={isIncluded(transaction)} disabled={editorSyncing} onChange={() => toggleInclude(transaction)} /><span>Import this transaction</span></label>
+                  <label className="check"><input type="checkbox" checked={!!transaction.internalTransfer} disabled={editorSyncing} onChange={() => saveTransaction({ internalTransfer: !transaction.internalTransfer }, `${transaction.internalTransfer ? 'Unmark' : 'Mark'} internal transfer: ${transaction.narration}`)} /><span>Transfer between our own accounts (keep in balance, not income/spending)</span></label>
                   <button type="button" disabled={editorSyncing} onClick={() => {
                     // Confirm the category that is actually shown. The expense Type/Group selects fall back to
                     // the first option when nothing is stored, so persist those too — otherwise the row would

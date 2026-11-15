@@ -32,6 +32,10 @@ const updateBody = z.object({
   direction: z.enum(['income', 'expense']).optional(),
   // Whether this row should be imported at all when the statement is approved.
   included: z.boolean().optional(),
+  // Mark a row as a transfer between Solucio's own accounts: it still posts (so balances are right)
+  // but is left out of income and spending. Set by the reviewer, since the bank text alone can't tell
+  // an internal transfer from a customer payment reliably.
+  internalTransfer: z.boolean().optional(),
 });
 const includeBody = z.object({ scope: z.enum(['all', 'income', 'expense']) });
 
@@ -124,6 +128,16 @@ router.patch('/:id/transactions/:transactionId', requirePermission('statements.r
     transaction.type = null;
     transaction.group = null;
     transaction.item = null;
+  }
+  // Marking a row an internal transfer clears its category (it is neither income nor spending) and
+  // counts as a reviewer decision so re-checking won't undo it.
+  if (body.internalTransfer === true) {
+    transaction.type = null;
+    transaction.group = null;
+    transaction.item = null;
+    transaction.confidence = 'high';
+    transaction.categorySource = 'reviewer';
+    transaction.reason = `Marked an internal transfer by ${req.user.name}`;
   }
   // A category can be set at any depth from the top, but never a deeper level without its parents
   // (no item without a group, no group without a type) — otherwise a row would be left half-categorized.

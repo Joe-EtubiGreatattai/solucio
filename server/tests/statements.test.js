@@ -207,6 +207,20 @@ describe('approving posts real records', () => {
     expect(await AuditLog.countDocuments({ action: 'income.create' })).toBe(1);
   });
 
+  test('a reviewer can mark a needs-review row an internal transfer; it then approves and posts flagged', async () => {
+    const statement = await makeStatement([expenseRow({ narration: 'TRF TO SOLUCIO CLINICS FUND SALARIES', confidence: 'needs-review', type: null, group: null, item: null })]);
+    const id = statement.transactions[0]._id;
+    const marked = await request(app).patch(`/api/statements/${statement.id}/transactions/${id}`).set(auth(accountant.token)).send({ internalTransfer: true });
+    expect(marked.status).toBe(200);
+    expect(marked.body.transactions[0]).toMatchObject({ internalTransfer: true, confidence: 'high', type: null, categorySource: 'reviewer' });
+
+    const approved = await request(app).post(`/api/statements/${statement.id}/approve`).set(auth(admin.token));
+    expect(approved.status).toBe(200); // no category needed
+    const expenses = await Expense.find();
+    expect(expenses).toHaveLength(1);
+    expect(expenses[0]).toMatchObject({ internalTransfer: true, type: 'Internal transfer' });
+  });
+
   test('an internal-transfer row posts without a category and is flagged on the record', async () => {
     const statement = await makeStatement([
       { date: new Date('2026-07-15T00:00:00Z'), narration: 'TRF TO SOLUCIO CLINICS - OWN ACCOUNT', amount: 2000000, direction: 'expense', internalTransfer: true, confidence: 'high' },
