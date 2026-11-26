@@ -93,28 +93,32 @@ router.get('/coverage', requirePermission('statements.view'), asyncHandler(async
     Account.find({ type: 'bank' }).select('name bankName').sort('name').lean(),
     Statement.find({ periodStart: { $ne: null } }).select('account periodStart periodEnd').lean(),
   ]);
-  const byAccount = new Map();
+  const byAccount = new Map(); // accountId -> Map(monthIndex -> { id, span })
   let min = null;
   let max = null;
   for (const s of statements) {
     const start = monthIndex(s.periodStart);
     const end = s.periodEnd ? Math.max(start, monthIndex(s.periodEnd)) : start;
-    const set = byAccount.get(String(s.account)) || new Set();
-    byAccount.set(String(s.account), set);
+    const span = end - start; // 0 for a single-month statement
+    const map = byAccount.get(String(s.account)) || new Map();
+    byAccount.set(String(s.account), map);
     for (let i = start; i <= end && i - start < 240; i += 1) {
-      set.add(i);
+      // When several statements cover the same month, link to the narrowest one (a dedicated monthly
+      // statement over a broad multi-month range), so the cell opens the most relevant statement.
+      const existing = map.get(i);
+      if (!existing || span < existing.span) map.set(i, { id: String(s._id), span });
       if (min === null || i < min) min = i;
       if (max === null || i > max) max = i;
     }
   }
   const months = [];
   if (min !== null) for (let i = min; i <= max; i += 1) months.push(indexToKey(i));
-  const accountsOut = accounts.map((a) => ({
-    _id: a._id,
-    name: a.name,
-    bankName: a.bankName,
-    covered: [...(byAccount.get(String(a._id)) || new Set())].map(indexToKey),
-  }));
+  const accountsOut = accounts.map((a) => {
+    const map = byAccount.get(String(a._id)) || new Map();
+    // month key -> statement id (which statement to open for that account and month)
+    const covered = Object.fromEntries([...map].map(([i, v]) => [indexToKey(i), v.id]));
+    return { _id: a._id, name: a.name, bankName: a.bankName, covered };
+  });
   res.json({ months, accounts: accountsOut });
 }));
 

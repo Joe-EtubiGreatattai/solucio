@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { api } from '../api';
 import { useLiveRefresh } from '../realtime/RealtimeProvider';
 
@@ -8,6 +9,7 @@ const keyLabel = (key) => { const [y, m] = key.split('-'); return `${MONTHS_SHOR
 // A grid of accounts (rows) × months (columns), ticked where a statement has been imported for that
 // account and month, so you can see exactly which account is missing which month.
 export default function CoverageMatrix() {
+  const navigate = useNavigate();
   const live = useLiveRefresh(['statements']);
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
@@ -36,17 +38,20 @@ export default function CoverageMatrix() {
           </thead>
           <tbody>
             {accounts.map((a) => {
-              const set = new Set(a.covered);
+              const covered = a.covered || {};
               return (
                 <tr key={a._id}>
                   <th className="coverage-table__acct" scope="row"><b>{a.name}</b>{a.bankName ? <small>{a.bankName}</small> : null}</th>
                   {months.map((k) => {
-                    const has = set.has(k);
-                    return (
-                      <td key={k} className={has ? 'cov-yes' : 'cov-no'} title={`${a.name} · ${keyLabel(k)} · ${has ? 'statement imported' : 'no statement'}`}>
-                        {has ? '✓' : '–'}
-                      </td>
-                    );
+                    const statementId = covered[k];
+                    if (statementId) {
+                      return (
+                        <td key={k} className="cov-yes">
+                          <button type="button" className="cov-cell" title={`${a.name} · ${keyLabel(k)} · open statement`} onClick={() => navigate(`/statements/${statementId}`)}>✓</button>
+                        </td>
+                      );
+                    }
+                    return <td key={k} className="cov-no" title={`${a.name} · ${keyLabel(k)} · no statement imported`}>–</td>;
                   })}
                 </tr>
               );
