@@ -74,6 +74,27 @@ test('the statements list is paginated, one page at a time', async () => {
   expect(res.body.items).toHaveLength(1);
 });
 
+test('periodFromTransactions returns the earliest and latest transaction dates', () => {
+  const { periodStart, periodEnd } = Statement.periodFromTransactions([
+    { date: new Date('2026-05-10') }, { date: new Date('2026-05-02') }, { date: new Date('2026-05-28') },
+    { date: 'not a date' }, {},
+  ]);
+  expect(periodStart.toISOString().slice(0, 10)).toBe('2026-05-02');
+  expect(periodEnd.toISOString().slice(0, 10)).toBe('2026-05-28');
+});
+
+test('the statements list is ordered by the month covered (newest first) and returns the period', async () => {
+  const base = { account: account._id, uploadedBy: admin.user._id, transactions: [expenseRow()] };
+  await Statement.create({ ...base, fileName: 'may.pdf', periodStart: new Date('2026-05-01'), periodEnd: new Date('2026-05-31') });
+  await Statement.create({ ...base, fileName: 'july.pdf', periodStart: new Date('2026-07-01'), periodEnd: new Date('2026-07-31') });
+  await Statement.create({ ...base, fileName: 'march.pdf', periodStart: new Date('2026-03-01'), periodEnd: new Date('2026-03-31') });
+  const res = await request(app).get('/api/statements').set(auth(accountant.token));
+  expect(res.status).toBe(200);
+  expect(res.body.items.map((s) => s.fileName)).toEqual(['july.pdf', 'may.pdf', 'march.pdf']);
+  expect(res.body.items[0].periodStart).toBeTruthy();
+  expect(res.body.items[0].periodEnd).toBeTruthy();
+});
+
 test('a reviewer can correct a transaction and approval remains blocked until it is reviewed', async () => {
   const statement = await makeStatement([expenseRow({ confidence: 'needs-review' })]);
   const transactionId = statement.transactions[0]._id;

@@ -44,11 +44,31 @@ const statementSchema = new Schema(
     uploadedBy: { type: Schema.Types.ObjectId, ref: 'User', required: true },
     approvedBy: { type: Schema.Types.ObjectId, ref: 'User' },
     approvedAt: Date,
+    // The period the statement covers, derived from the earliest and latest transaction dates. Lets the
+    // library sort and group statements by the months they cover (not the date they were imported).
+    periodStart: { type: Date },
+    periodEnd: { type: Date },
     transactions: { type: [transactionSchema], default: [] },
   },
   { timestamps: true }
 );
 
 statementSchema.index({ account: 1, createdAt: -1 });
+statementSchema.index({ periodStart: -1 });
 
-module.exports = mongoose.model('Statement', statementSchema);
+// Earliest and latest transaction dates — the period the statement covers.
+function periodFromTransactions(transactions = []) {
+  let periodStart = null;
+  let periodEnd = null;
+  for (const t of transactions) {
+    const d = t && t.date ? new Date(t.date) : null;
+    if (!d || Number.isNaN(d.getTime())) continue;
+    if (!periodStart || d < periodStart) periodStart = d;
+    if (!periodEnd || d > periodEnd) periodEnd = d;
+  }
+  return { periodStart, periodEnd };
+}
+
+const Statement = mongoose.model('Statement', statementSchema);
+Statement.periodFromTransactions = periodFromTransactions;
+module.exports = Statement;

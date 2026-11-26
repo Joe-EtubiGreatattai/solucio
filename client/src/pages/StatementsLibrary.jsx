@@ -8,7 +8,7 @@ import Field from '../components/Field';
 import Pagination from '../components/Pagination';
 import { formatDate } from '../utils/dates';
 import { Skeleton } from '../components/Skeleton';
-import { unresolvedCount } from './statementUtils';
+import { unresolvedCount, groupByMonth, monthCoverage, periodLabel } from './statementUtils';
 
 const PAGE_SIZE = 25;
 
@@ -113,27 +113,43 @@ export default function StatementsLibrary() {
         <div className="card statement-blank"><span>⌁</span><h2>Your review workspace is ready</h2><p>Import a bank statement when you are ready to begin. Imported statements will appear here to open and review.</p></div>
       ) : (
         <>
-        <div className="statement-library-head"><h2>Imported statements</h2><span>{total} statement{total === 1 ? '' : 's'} · tap one to review</span></div>
-        <div className="statement-library" role="list" aria-label="Imported statements">
-          {statements.map((entry) => {
-            // The list endpoint sends counts only; a just-uploaded statement still carries its full
-            // transactions array, so fall back to it so the new card shows the right numbers immediately.
-            const unresolved = entry.unresolvedCount ?? unresolvedCount(entry);
-            const count = entry.transactionCount ?? entry.transactions?.length ?? 0;
-            return (
-              <button type="button" role="listitem" key={entry._id} className="statement-card" onClick={() => navigate(`/statements/${entry._id}`)}>
-                <span className="statement-list-file">PDF</span>
-                <div className="statement-card-body">
-                  <b>{entry.fileName}</b>
-                  <small>{entry.account?.name || 'Unknown account'} · {count} transactions · {formatDate(entry.createdAt)}</small>
-                </div>
-                <span className={entry.status === 'approved' ? 'approved-lock' : unresolved ? 'review-count' : 'ready-count'}>
-                  {entry.status === 'approved' ? 'Approved' : unresolved ? `${unresolved} to review` : 'Ready'}
-                </span>
-              </button>
-            );
-          })}
-        </div>
+        <div className="statement-library-head"><h2>Imported statements</h2><span>{total} statement{total === 1 ? '' : 's'} · newest month first</span></div>
+        {(() => { const cov = monthCoverage(statements); if (!cov.fromLabel) return null; return cov.missing.length ? (
+          <div className="statement-coverage statement-coverage--gaps" role="status">
+            <b>Months with no statement imported ({cov.missing.length}):</b> {cov.missing.join(' · ')}
+            <span className="statement-coverage__note">Across all accounts, {cov.fromLabel} to {cov.toLabel}.</span>
+          </div>
+        ) : (
+          <div className="statement-coverage statement-coverage--ok" role="status">
+            <b>Every month is covered</b> — {cov.fromLabel} to {cov.toLabel}, no gaps across all accounts.
+          </div>
+        ); })()}
+        {groupByMonth(statements).map((group) => (
+          <section className="statement-month-group" key={group.key} aria-label={`Statements covering ${group.label}`}>
+            <h3 className="statement-month-head"><span>{group.label}</span><em>{group.items.length} statement{group.items.length === 1 ? '' : 's'}</em></h3>
+            <div className="statement-library" role="list" aria-label={`Statements covering ${group.label}`}>
+              {group.items.map((entry) => {
+                // The list endpoint sends counts only; a just-uploaded statement still carries its full
+                // transactions array, so fall back to it so the new card shows the right numbers immediately.
+                const unresolved = entry.unresolvedCount ?? unresolvedCount(entry);
+                const count = entry.transactionCount ?? entry.transactions?.length ?? 0;
+                const period = periodLabel(entry.periodStart, entry.periodEnd);
+                return (
+                  <button type="button" role="listitem" key={entry._id} className="statement-card" onClick={() => navigate(`/statements/${entry._id}`)} title={`Imported ${formatDate(entry.createdAt)}`}>
+                    <span className="statement-list-file">PDF</span>
+                    <div className="statement-card-body">
+                      <b>{entry.fileName}</b>
+                      <small>{entry.account?.name || 'Unknown account'} · {count} transactions{period ? ` · covers ${period}` : ''}</small>
+                    </div>
+                    <span className={entry.status === 'approved' ? 'approved-lock' : unresolved ? 'review-count' : 'ready-count'}>
+                      {entry.status === 'approved' ? 'Approved' : unresolved ? `${unresolved} to review` : 'Ready'}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </section>
+        ))}
         <Pagination page={page} limit={PAGE_SIZE} total={total} onPage={setPage} />
         </>
       )}

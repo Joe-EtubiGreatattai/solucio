@@ -71,8 +71,8 @@ router.get('/', requirePermission('statements.view'), validate(listQuery, 'query
   const filter = accountId ? { account: accountId } : {};
   const [items, total] = await Promise.all([
     Statement.find(filter)
-      .select('account fileName holderName status uploadedBy approvedBy approvedAt createdAt transactions.included transactions.confidence')
-      .sort({ createdAt: -1 })
+      .select('account fileName holderName status uploadedBy approvedBy approvedAt createdAt periodStart periodEnd transactions.included transactions.confidence')
+      .sort({ periodStart: -1, createdAt: -1 })
       .skip((page - 1) * limit)
       .limit(limit)
       .populate('account', 'name bankName accountNumber')
@@ -108,7 +108,8 @@ router.post('/import', requirePermission('statements.import'), express.raw({ typ
   const holderName = result.accountName || account.name;
   const results = categorizeTransactions(result.transactions, { ...(await loadCategorizerContext()), ownerName: holderName });
   const transactions = result.transactions.map((transaction, i) => ({ ...transaction, ...results[i] }));
-  const statement = await Statement.create({ account: account._id, fileName, holderName, uploadedBy: req.user._id, transactions });
+  const { periodStart, periodEnd } = Statement.periodFromTransactions(transactions);
+  const statement = await Statement.create({ account: account._id, fileName, holderName, uploadedBy: req.user._id, transactions, periodStart, periodEnd });
   // The raw PDF is kept out of the statement document (see StatementSource) so the statement stays small.
   await StatementSource.create({ statement: statement._id, mimeType: 'application/pdf', data: req.body });
   await logAudit({ actor: req.user._id, action: 'statement.import', targetModel: 'Statement', targetId: statement._id, details: { fileName, account: account.name, transactions: result.transactions.length, pages: result.pageCount, checksum: crypto.createHash('sha256').update(req.body).digest('hex').slice(0, 12) } });
