@@ -10,7 +10,7 @@ const renderWith = (auth) =>
       <MemoryRouter initialEntries={['/dashboard']}>
         <Routes>
           <Route path="*" element={<UpdateAnnouncement />} />
-          <Route path="/reports" element={<p>Reports Page</p>} />
+          <Route path="/admin" element={<p>Admin Page</p>} />
         </Routes>
       </MemoryRouter>
     </AuthContext.Provider>
@@ -18,7 +18,7 @@ const renderWith = (auth) =>
 
 test('shows the update to an admin who has not seen it yet', async () => {
   renderWith({ isAdmin: true });
-  expect(await screen.findByRole('dialog')).toHaveTextContent(/categor/i);
+  expect(await screen.findByRole('dialog')).toHaveTextContent(/slate|year end/i);
 });
 
 test('is not shown to non-admins', () => {
@@ -40,12 +40,12 @@ test('dismissing hides it and records it against the user', async () => {
   expect(markUpdateSeen).toHaveBeenCalledWith(UPDATE_ID);
 });
 
-test('the "view it" action records it, hides the modal and goes to the Reports page', async () => {
+test('the "view it" action records it, hides the modal and goes to the Admin page', async () => {
   const markUpdateSeen = vi.fn();
   renderWith({ isAdmin: true, markUpdateSeen });
   await screen.findByRole('dialog');
-  await userEvent.click(screen.getByRole('button', { name: /reports/i }));
+  await userEvent.click(screen.getByRole('button', { name: /year end/i }));
   expect(screen.queryByRole('dialog')).toBeNull();
-  expect(screen.getByText('Reports Page')).toBeInTheDocument();
+  expect(screen.getByText('Admin Page')).toBeInTheDocument();
   expect(markUpdateSeen).toHaveBeenCalledWith(UPDATE_ID);
 });

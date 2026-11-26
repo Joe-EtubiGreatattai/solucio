@@ -5,7 +5,7 @@ import { useAuth } from '../auth/AuthContext';
 // A one-time "what's new" modal for admins. Bump UPDATE_ID when there is a new thing to announce and
 // everyone who can see it will be shown it once more. "Seen" is stored on the user record (server-side),
 // so dismissing it once hides it on every device that person signs in from.
-export const UPDATE_ID = 'reports-category-drilldown-2026-10';
+export const UPDATE_ID = 'new-slate-year-end-2026-11';
 
 export default function UpdateAnnouncement() {
   const { isAdmin, can, user, markUpdateSeen } = useAuth();
@@ -14,7 +14,7 @@ export default function UpdateAnnouncement() {
   const primaryRef = useRef(null);
 
   // Only the people who can actually use the feature — admins and the maintenance super-user — are told.
-  const eligible = isAdmin || can('accounts.manage');
+  const eligible = isAdmin || can('slate.manage');
   const alreadySeen = (user?.seenUpdates || []).includes(UPDATE_ID);
   const show = eligible && !alreadySeen && !dismissed;
 
@@ -28,19 +28,19 @@ export default function UpdateAnnouncement() {
   if (!show) return null;
 
   const dismiss = () => { setDismissed(true); markUpdateSeen(UPDATE_ID); };
-  const viewIt = () => { setDismissed(true); markUpdateSeen(UPDATE_ID); navigate('/reports'); };
+  const viewIt = () => { setDismissed(true); markUpdateSeen(UPDATE_ID); navigate('/admin'); };
   const onKeyDown = (e) => { if (e.key === 'Escape') { e.preventDefault(); dismiss(); } };
 
   return (
     <div className="modal">
       <div className="card update-modal" role="dialog" aria-modal="true" aria-labelledby="update-title" onKeyDown={onKeyDown}>
         <span className="update-badge">New update</span>
-        <h3 id="update-title">Drill into your report categories</h3>
-        <p>On the <strong>Reports</strong> page, you can now click any category under <strong>Spending by category</strong> or <strong>Income by category</strong> to expand it and see the breakdown by sub-item — each item’s amount and share.</p>
-        <p className="muted">Look for the categories with a small ▸ arrow; click one to open or close its items.</p>
+        <h3 id="update-title">Close the year with a new slate</h3>
+        <p>There’s a new <strong>Year end</strong> tab in <strong>Admin</strong>. At the end of the year, <strong>New slate</strong> saves the whole year into a slate you can view and download, then clears the system for a fresh start.</p>
+        <p className="muted">It archives everything first, so nothing is lost — then clears income, expenses, statements and categories, resets receipt numbers and zeroes every account’s balance. Super-admins only.</p>
         <div className="row modal-actions">
           <button type="button" className="secondary" onClick={dismiss}>Got it</button>
-          <button type="button" ref={primaryRef} onClick={viewIt}>View it on Reports</button>
+          <button type="button" ref={primaryRef} onClick={viewIt}>Open Year end</button>
         </div>
       </div>
     </div>
