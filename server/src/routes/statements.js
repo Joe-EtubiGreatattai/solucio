@@ -20,6 +20,7 @@ const { classifyAgainstTree, getTree, assertValidCategory } = require('../servic
 const router = express.Router();
 const listQuery = z.object({
   accountId: objectId.optional(),
+  month: z.string().regex(/^\d{4}-\d{2}$/).optional(),
   page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).max(200).default(25),
 });
@@ -67,8 +68,16 @@ const summarize = (statement) => {
 };
 
 router.get('/', requirePermission('statements.view'), validate(listQuery, 'query'), asyncHandler(async (req, res) => {
-  const { accountId, page, limit } = req.validated.query;
+  const { accountId, month, page, limit } = req.validated.query;
   const filter = accountId ? { account: accountId } : {};
+  if (month) {
+    // Statements whose covered period overlaps the given month (so a Jan–Sep statement shows under each).
+    const [y, m] = month.split('-').map(Number);
+    const start = new Date(Date.UTC(y, m - 1, 1));
+    const next = new Date(Date.UTC(y, m, 1));
+    filter.periodStart = { $lt: next };
+    filter.periodEnd = { $gte: start };
+  }
   const [items, total] = await Promise.all([
     Statement.find(filter)
       .select('account fileName holderName status uploadedBy approvedBy approvedAt createdAt periodStart periodEnd transactions.included transactions.confidence')
@@ -120,6 +129,33 @@ router.get('/coverage', requirePermission('statements.view'), asyncHandler(async
     return { _id: a._id, name: a.name, bankName: a.bankName, covered };
   });
   res.json({ months, accounts: accountsOut });
+}));
+
+// One box per month: how many statements cover it and how many accounts. Empty months (gaps) are
+// included with a count of 0, so the overview shows which months have nothing imported.
+router.get('/months', requirePermission('statements.view'), asyncHandler(async (req, res) => {
+  const statements = await Statement.find({ periodStart: { $ne: null } }).select('account periodStart periodEnd').lean();
+  const perMonth = new Map(); // monthIndex -> { count, accounts:Set }
+  let min = null;
+  let max = null;
+  for (const s of statements) {
+    const start = monthIndex(s.periodStart);
+    const end = s.periodEnd ? Math.max(start, monthIndex(s.periodEnd)) : start;
+    for (let i = start; i <= end && i - start < 240; i += 1) {
+      const entry = perMonth.get(i) || { count: 0, accounts: new Set() };
+      entry.count += 1;
+      entry.accounts.add(String(s.account));
+      perMonth.set(i, entry);
+      if (min === null || i < min) min = i;
+      if (max === null || i > max) max = i;
+    }
+  }
+  const months = [];
+  if (min !== null) for (let i = max; i >= min; i -= 1) {
+    const entry = perMonth.get(i);
+    months.push({ key: indexToKey(i), statements: entry ? entry.count : 0, accounts: entry ? entry.accounts.size : 0 });
+  }
+  res.json({ months });
 }));
 
 router.get('/:id', requirePermission('statements.view'), asyncHandler(async (req, res) => {

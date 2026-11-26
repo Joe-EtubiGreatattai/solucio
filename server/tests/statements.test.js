@@ -116,6 +116,27 @@ test('coverage reports which months each account has and where the gaps are', as
   expect(zen.covered['2026-03']).toBe(String(range._id));
 });
 
+test('the months overview counts statements per month and includes empty months as gaps', async () => {
+  const base = { account: account._id, uploadedBy: admin.user._id, transactions: [expenseRow()] };
+  await Statement.create({ ...base, fileName: 'may.pdf', periodStart: new Date('2026-05-01'), periodEnd: new Date('2026-05-31') });
+  await Statement.create({ ...base, fileName: 'jul.pdf', periodStart: new Date('2026-07-01'), periodEnd: new Date('2026-07-31') });
+  const res = await request(app).get('/api/statements/months').set(auth(accountant.token));
+  expect(res.status).toBe(200);
+  expect(res.body.months.map((m) => m.key)).toEqual(['2026-07', '2026-06', '2026-05']); // newest first, June is a gap
+  expect(res.body.months.find((m) => m.key === '2026-06').statements).toBe(0);
+  expect(res.body.months.find((m) => m.key === '2026-05')).toMatchObject({ statements: 1, accounts: 1 });
+});
+
+test('the list can be filtered to one month, including statements whose range overlaps it', async () => {
+  const base = { account: account._id, uploadedBy: admin.user._id, transactions: [expenseRow()] };
+  await Statement.create({ ...base, fileName: 'may.pdf', periodStart: new Date('2026-05-01'), periodEnd: new Date('2026-05-31') });
+  await Statement.create({ ...base, fileName: 'range.pdf', periodStart: new Date('2026-01-01'), periodEnd: new Date('2026-09-30') });
+  await Statement.create({ ...base, fileName: 'dec.pdf', periodStart: new Date('2026-12-01'), periodEnd: new Date('2026-12-31') });
+  const res = await request(app).get('/api/statements?month=2026-05').set(auth(accountant.token));
+  expect(res.status).toBe(200);
+  expect(res.body.items.map((s) => s.fileName).sort()).toEqual(['may.pdf', 'range.pdf']); // December excluded
+});
+
 test('a reviewer can correct a transaction and approval remains blocked until it is reviewed', async () => {
   const statement = await makeStatement([expenseRow({ confidence: 'needs-review' })]);
   const transactionId = statement.transactions[0]._id;

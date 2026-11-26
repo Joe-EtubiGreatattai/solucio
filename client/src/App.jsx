@@ -15,6 +15,7 @@ const Dashboard = lazy(() => import('./pages/Dashboard'));
 const Reports = lazy(() => import('./pages/Reports'));
 const Activity = lazy(() => import('./pages/Activity'));
 const StatementsLibrary = lazy(() => import('./pages/StatementsLibrary'));
+const StatementMonth = lazy(() => import('./pages/StatementMonth'));
 const StatementReview = lazy(() => import('./pages/StatementReview'));
 const Admin = lazy(() => import('./pages/Admin'));
 
@@ -40,6 +41,7 @@ export default function App() {
         <Route path="/income" element={guard('/income', <Income />)} />
         <Route path="/expenses" element={guard('/expenses', <Expenses />)} />
         <Route path="/statements" element={guard('/statements', <StatementsLibrary />)} />
+        <Route path="/statements/month/:monthKey" element={guard('/statements', <StatementMonth />)} />
         <Route path="/statements/:id" element={guard('/statements', <StatementReview />)} />
         <Route path="/reports" element={guard('/reports', <Reports />)} />
         <Route path="/activity" element={guard('/activity', <Activity />)} />
