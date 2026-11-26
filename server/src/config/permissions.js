@@ -16,6 +16,7 @@ const PERMISSIONS = [
   { key: 'accounts.manage', label: 'Manage accounts', group: 'Administration' },
   { key: 'categories.manage', label: 'Manage expense categories', group: 'Administration' },
   { key: 'users.manage', label: 'Manage users', group: 'Administration' },
+  { key: 'slate.manage', label: 'Start a new year (archive and clear the system)', group: 'Administration' },
 ];
 const PERMISSION_KEYS = PERMISSIONS.map((p) => p.key);
 

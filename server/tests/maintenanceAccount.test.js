@@ -26,8 +26,8 @@ describe('maintenance account', () => {
     const res = await request(app).post('/api/auth/login').send({ email: 'solucio@fix.com', password: 'password123' });
     expect(res.status).toBe(200);
     expect(res.body.roleName).toBe('Maintenance');
-    expect(res.body.permissions).toHaveLength(16);
-    expect(res.body.permissions).toEqual(expect.arrayContaining(['users.manage', 'accounts.manage', 'statements.approve', 'reports.view']));
+    expect(res.body.permissions).toHaveLength(17);
+    expect(res.body.permissions).toEqual(expect.arrayContaining(['users.manage', 'accounts.manage', 'statements.approve', 'reports.view', 'slate.manage']));
   });
 
   test('is hidden from the user list and cannot be seen or changed by an admin', async () => {

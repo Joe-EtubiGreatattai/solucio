@@ -208,3 +208,4 @@ body{font-size:15px}.side-nav a{font-size:13px}.workspace-head span{font-size:12
 .month-box--empty .month-box__go{color:#c98a1e}
 .statement-back{display:inline-block;margin-bottom:6px;color:var(--blue);font-size:12px;font-weight:600;text-decoration:none}
 .statement-back:hover{text-decoration:underline}
+.year-end-card{border-color:#f0d9c4;background:#fffaf4}.year-end-what{margin:12px 0 16px;padding-left:18px;color:var(--soft-ink);font-size:13px;line-height:1.7}.year-end-what li{margin:2px 0}.year-end-confirm{margin-top:14px;padding-top:14px;border-top:1px dashed #e6d4c0;display:grid;gap:12px;max-width:380px}.year-end-warn{margin:0;color:var(--red);font-size:12px;font-weight:700;line-height:1.5}.slate-table b{font-variant-numeric:tabular-nums}

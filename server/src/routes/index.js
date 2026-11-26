@@ -12,6 +12,7 @@ router.use('/reports', require('./reports'));
 router.use('/audit-logs', require('./auditLogs'));
 router.use('/roles', require('./roles'));
 router.use('/users', require('./users'));
+router.use('/slates', require('./slates'));
 // Server-to-server connections from other Solucio apps (key-protected, off unless configured)
 router.use('/integrations', require('./integrations'));
 

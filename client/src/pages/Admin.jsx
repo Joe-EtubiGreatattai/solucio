@@ -4,6 +4,7 @@ import UsersAdmin from './admin/UsersAdmin';
 import AccountsAdmin from './admin/AccountsAdmin';
 import CategoriesAdmin from './admin/CategoriesAdmin';
 import RolesAdmin from './admin/RolesAdmin';
+import YearEndAdmin from './admin/YearEndAdmin';
 
 export default function Admin() {
   const { can, isAdmin } = useAuth();
@@ -13,6 +14,7 @@ export default function Admin() {
     can('accounts.manage') && { id: 'accounts', label: 'Accounts', screen: <AccountsAdmin /> },
     can('categories.manage') && { id: 'categories', label: 'Categories', screen: <CategoriesAdmin /> },
     isAdmin && { id: 'roles', label: 'Roles', screen: <RolesAdmin /> },
+    can('slate.manage') && { id: 'year-end', label: 'Year end', screen: <YearEndAdmin /> },
   ].filter(Boolean);
   const [chosen, setChosen] = useState(null);
   const active = tabs.find((t) => t.id === chosen) || tabs[0];
