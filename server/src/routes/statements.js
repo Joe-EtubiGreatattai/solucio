@@ -83,6 +83,41 @@ router.get('/', requirePermission('statements.view'), validate(listQuery, 'query
   res.json({ items: items.map(summarize), total, page, limit });
 }));
 
+// Per-account month coverage: which months each bank account has a statement for, and which it is missing.
+// A statement covers every month in its own start–end range, so a Jan–Sep statement fills nine months.
+const COVERAGE_LAGOS = 60 * 60 * 1000; // UTC+1
+const monthIndex = (date) => { const d = new Date(new Date(date).getTime() + COVERAGE_LAGOS); return d.getUTCFullYear() * 12 + d.getUTCMonth(); };
+const indexToKey = (i) => `${Math.floor(i / 12)}-${String((i % 12) + 1).padStart(2, '0')}`;
+router.get('/coverage', requirePermission('statements.view'), asyncHandler(async (req, res) => {
+  const [accounts, statements] = await Promise.all([
+    Account.find({ type: 'bank' }).select('name bankName').sort('name').lean(),
+    Statement.find({ periodStart: { $ne: null } }).select('account periodStart periodEnd').lean(),
+  ]);
+  const byAccount = new Map();
+  let min = null;
+  let max = null;
+  for (const s of statements) {
+    const start = monthIndex(s.periodStart);
+    const end = s.periodEnd ? Math.max(start, monthIndex(s.periodEnd)) : start;
+    const set = byAccount.get(String(s.account)) || new Set();
+    byAccount.set(String(s.account), set);
+    for (let i = start; i <= end && i - start < 240; i += 1) {
+      set.add(i);
+      if (min === null || i < min) min = i;
+      if (max === null || i > max) max = i;
+    }
+  }
+  const months = [];
+  if (min !== null) for (let i = min; i <= max; i += 1) months.push(indexToKey(i));
+  const accountsOut = accounts.map((a) => ({
+    _id: a._id,
+    name: a.name,
+    bankName: a.bankName,
+    covered: [...(byAccount.get(String(a._id)) || new Set())].map(indexToKey),
+  }));
+  res.json({ months, accounts: accountsOut });
+}));
+
 router.get('/:id', requirePermission('statements.view'), asyncHandler(async (req, res) => {
   const statement = await Statement.findById(req.params.id).populate(REFS);
   if (!statement) throw new AppError(404, 'Statement not found');

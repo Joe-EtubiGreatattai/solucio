@@ -9,6 +9,7 @@ import Pagination from '../components/Pagination';
 import { formatDate } from '../utils/dates';
 import { Skeleton } from '../components/Skeleton';
 import { unresolvedCount, groupByMonth, monthCoverage, periodLabel } from './statementUtils';
+import CoverageMatrix from './CoverageMatrix';
 
 const PAGE_SIZE = 25;
 
@@ -30,6 +31,7 @@ export default function StatementsLibrary() {
   const [uploading, setUploading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [showImport, setShowImport] = useState(false);
+  const [showCoverage, setShowCoverage] = useState(true);
 
   const load = useCallback(async () => {
     try {
@@ -113,6 +115,11 @@ export default function StatementsLibrary() {
         <div className="card statement-blank"><span>⌁</span><h2>Your review workspace is ready</h2><p>Import a bank statement when you are ready to begin. Imported statements will appear here to open and review.</p></div>
       ) : (
         <>
+        <div className="coverage-head">
+          <h2>Monthly coverage by account</h2>
+          <button type="button" className="coverage-toggle" aria-expanded={showCoverage} onClick={() => setShowCoverage((v) => !v)}>{showCoverage ? 'Hide' : 'Show'}</button>
+        </div>
+        {showCoverage && <CoverageMatrix />}
         <div className="statement-library-head"><h2>Imported statements</h2><span>{total} statement{total === 1 ? '' : 's'} · newest month first</span></div>
         {(() => { const cov = monthCoverage(statements); if (!cov.fromLabel) return null; return cov.missing.length ? (
           <div className="statement-coverage statement-coverage--gaps" role="status">

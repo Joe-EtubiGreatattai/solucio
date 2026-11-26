@@ -95,6 +95,22 @@ test('the statements list is ordered by the month covered (newest first) and ret
   expect(res.body.items[0].periodEnd).toBeTruthy();
 });
 
+test('coverage reports which months each account has and where the gaps are', async () => {
+  const other = await makeAccount({ name: 'Zenith', accountNumber: '9988776655' });
+  const base = { uploadedBy: admin.user._id, transactions: [expenseRow()] };
+  await Statement.create({ ...base, account: account._id, fileName: 'may.pdf', periodStart: new Date('2026-05-01'), periodEnd: new Date('2026-05-31') });
+  await Statement.create({ ...base, account: account._id, fileName: 'jul.pdf', periodStart: new Date('2026-07-01'), periodEnd: new Date('2026-07-31') });
+  await Statement.create({ ...base, account: other._id, fileName: 'range.pdf', periodStart: new Date('2026-01-01'), periodEnd: new Date('2026-07-31') });
+
+  const res = await request(app).get('/api/statements/coverage').set(auth(accountant.token));
+  expect(res.status).toBe(200);
+  expect(res.body.months).toEqual(['2026-01', '2026-02', '2026-03', '2026-04', '2026-05', '2026-06', '2026-07']);
+  const main = res.body.accounts.find((a) => a.name === 'Main Account');
+  const zen = res.body.accounts.find((a) => a.name === 'Zenith');
+  expect(main.covered.sort()).toEqual(['2026-05', '2026-07']); // June is a gap for this account
+  expect(zen.covered.sort()).toEqual(['2026-01', '2026-02', '2026-03', '2026-04', '2026-05', '2026-06', '2026-07']); // the range fills every month
+});
+
 test('a reviewer can correct a transaction and approval remains blocked until it is reviewed', async () => {
   const statement = await makeStatement([expenseRow({ confidence: 'needs-review' })]);
   const transactionId = statement.transactions[0]._id;
